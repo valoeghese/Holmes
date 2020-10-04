@@ -2,8 +2,10 @@ package valoeghese.holmes;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.requests.restaction.MessageAction;
@@ -20,6 +22,7 @@ public class Game {
 	public final long id;
 	public final List<User> users = new ArrayList<>();
 	public final Map<User, List<Card>> hands = new HashMap<>();
+	public final Queue<Card> deck = createDeck();
 
 	public long terminationTime;
 	public boolean started = false;
@@ -82,6 +85,14 @@ public class Game {
 				System.err.println("Error sending broadcast PM");
 				e.printStackTrace();
 			}
+		}
+	}
+
+	private static Queue<Card> createDeck() {
+		LinkedList<Card> result = new LinkedList<>();
+		
+		for (int i = 0; i < 6; ++i) {
+			
 		}
 	}
 }
