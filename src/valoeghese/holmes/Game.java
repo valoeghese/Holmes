@@ -50,7 +50,8 @@ public class Game {
 
 	private void startGame() {
 		this.started = true;
-		this.broadcast("The Game is AFOOT! Initialising Game!");
+		Collections.shuffle(this.users);
+		this.broadcast("The game is afoot! Initialising Game!");
 		int toAdd = this.capacity * 6 - 2;
 
 		LinkedList<Card> deck = createDeck();
@@ -96,6 +97,18 @@ public class Game {
 		}
 
 		this.broadcast(msg.toString());
+	}
+
+	public void announcePlayerTurn() {
+		User user = this.users.get(this.turn);
+		StringBuilder handList = new StringBuilder();
+		List<Card> hand = this.hands.get(user);
+
+		for (Card card : hand) {
+			handList.append("\n- " + card.name);
+		}
+
+		this.message(user, "It is your turn! Cards in your deck: " + handList.toString());
 	}
 
 	private void nextTurn() {
