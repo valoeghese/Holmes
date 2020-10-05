@@ -1,3 +1,8 @@
+/**
+ * Discord bot based off of an existing Sherlock Holmes card game. Bot code for private hosting and use.
+ * I recommend buying the actual game it's quite fun.
+ */
+
 package valoeghese.holmes;
 
 import java.io.File;
