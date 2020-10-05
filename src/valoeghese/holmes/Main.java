@@ -108,14 +108,17 @@ public class Main extends ListenerAdapter {
 
 	@Override
 	public void onPrivateMessageReceived(PrivateMessageReceivedEvent event) {
-		// TODO Auto-generated method stub
-		super.onPrivateMessageReceived(event);
+		User author = event.getAuthor();
+
+		if (USER_2_GAME.containsKey(author)) {
+			USER_2_GAME.get(author).process(author, event.getMessage().getContentRaw());
+		}
 	}
 
 	public static final Map<User, Game> USER_2_GAME = new HashMap<>();
 	public static final Long2ObjectMap<Game> GAMES = new Long2ObjectArrayMap<>();
 
-	public static int nextGameId = new Random().nextInt(10000) - 5000;
+	private static int nextGameId = new Random().nextInt(10000) - 5000;
 
 	public static void main(String[] args) {
 		try (FileInputStream fis = new FileInputStream(new File("./properties.txt"))) {

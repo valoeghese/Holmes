@@ -20,15 +20,16 @@ public class Game {
 		this.id = id;
 	}
 
-	public final int capacity;
+	private final int capacity;
 	public final long id;
-	public final List<User> users = new ArrayList<>();
-	public final Map<User, List<Card>> hands = new HashMap<>();
-	public Queue<Card> deck;
+	private final List<User> users = new ArrayList<>();
+	private final Map<User, List<Card>> hands = new HashMap<>();
+	private Queue<Card> deck;
 	private int turn = 0;
+	private Card location = Card.BAKER_STREET;
 
-	public long terminationTime;
-	public boolean started = false;
+	private long terminationTime;
+	private boolean started = false;
 
 	private void updateTime() {
 		this.terminationTime = System.currentTimeMillis() + 1000 * 60 * 5; // 5 minute due time
@@ -97,18 +98,26 @@ public class Game {
 		}
 
 		this.broadcast(msg.toString());
+		this.announcePlayerTurn();
 	}
 
 	public void announcePlayerTurn() {
-		User user = this.users.get(this.turn);
-		StringBuilder handList = new StringBuilder();
-		List<Card> hand = this.hands.get(user);
+		try {
+			User user = this.users.get(this.turn);
+			StringBuilder handList = new StringBuilder();
+			List<Card> hand = this.hands.get(user);
 
-		for (Card card : hand) {
-			handList.append("\n- " + card.name);
+			int index = 0;
+
+			for (Card card : hand) {
+				handList.append("\n- [" + (index++) + "] " + card.name);
+			}
+
+			this.message(user, "It is your turn! Cards in your hand: " + handList.toString() + "\nRespond with the [card index] to play a card, or \"draw\" to draw.").queue();
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw new RuntimeException(e);
 		}
-
-		this.message(user, "It is your turn! Cards in your deck: " + handList.toString());
 	}
 
 	private void nextTurn() {
@@ -118,10 +127,12 @@ public class Game {
 	}
 
 	private void drawCards(User user, Queue<Card> deck, int count) {
-		List<Card> cards = this.hands.computeIfAbsent(user, u -> new ArrayList<>());
+		if (!deck.isEmpty()) {
+			List<Card> cards = this.hands.computeIfAbsent(user, u -> new ArrayList<>());
 
-		for (int i = 0; i < count; ++i) {
-			cards.add(deck.remove());
+			for (int i = 0; i < count; ++i) {
+				cards.add(deck.remove());
+			}
 		}
 	}
 
@@ -153,17 +164,62 @@ public class Game {
 		}
 	}
 
+	public void process(User author, String message) {
+		if (this.users.get(this.turn) == author) {
+			try {
+				List<Card> hand = this.hands.get(author);
+
+				if (hand.isEmpty()) {
+					// TODO rules for arrest/draw of non-villains
+					this.nextTurn();
+					this.announcePlayerTurn();
+				} else if (message.equals("draw")) {
+					// action
+					drawCards(author, this.deck, 1);
+					this.broadcastExcept(author, "**" + author.getName() + "** has chosen to draw.");
+
+					// response
+					this.message(author, "You drew *" + hand.get(hand.size() - 1) + "*").queue();
+
+					// finalise
+					this.nextTurn();
+					this.announcePlayerTurn();
+				} else {
+					int cardIndex = Integer.parseInt(message);
+					Card played = hand.remove(cardIndex);
+
+					this.broadcastExcept(author, "**" + author.getName() + "** has chosen to play *" + played.name + "*.");
+
+					this.nextTurn();
+					this.announcePlayerTurn();
+				}
+			} catch (NumberFormatException e) {
+				System.out.println("ignored:");
+				e.printStackTrace(System.out);
+			} catch (Exception e) {
+				this.message(author, "Error processing message: " + e.getLocalizedMessage()).complete();
+				e.printStackTrace();
+			}
+		}
+	}
+
 	private MessageAction message(User user, String message) {
 		return user.openPrivateChannel().complete().sendMessage(message);
 	}
 
 	private void broadcast(String message) {
+		this.broadcastExcept(null, message);
+	}
+
+	private void broadcastExcept(User exempt, String message) {
 		for (User user : this.users) {
-			try {
-				message(user, message).queue();
-			} catch (Exception e) {
-				System.err.println("Error sending broadcast PM");
-				e.printStackTrace();
+			if (user != exempt) {
+				try {
+					message(user, message).queue();
+				} catch (Exception e) {
+					System.err.println("Error sending broadcast PM");
+					e.printStackTrace();
+				}
 			}
 		}
 	}
