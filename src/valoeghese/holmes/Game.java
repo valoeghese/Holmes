@@ -27,9 +27,11 @@ public class Game {
 	private Queue<Card> deck;
 	private int turn = 0;
 	private Card location = Card.BAKER_STREET;
+	private Card previous = Card.NONE;
 
 	private long terminationTime;
 	private boolean started = false;
+	private boolean pause = false; // whether to pause the game for an out-of-turn player response
 
 	private void updateTime() {
 		this.terminationTime = System.currentTimeMillis() + 1000 * 60 * 5; // 5 minute due time
@@ -49,10 +51,151 @@ public class Game {
 		}
 	}
 
+	public void removePlayer(User user) {
+		if (this.users.contains(user)) {
+			this.users.remove(user);
+			Main.USER_2_GAME.remove(user, this);
+
+			if (this.users.isEmpty()) {
+				this.terminate();
+			}
+		}
+	}
+
+	public void process(User author, String message) {
+		if (this.terminateIfOverdue()) {
+			this.message(author, "Your session has expired!").queue();
+			return;
+		}
+
+		if (this.users.get(this.turn) == author) {
+			try {
+				List<Card> hand = this.hands.get(author);
+
+				if (hand.isEmpty()) {
+					// TODO rules for arrest/draw of non-villains
+					this.nextTurn();
+					this.announcePlayerTurn();
+				} else if (message.equals("draw")) {
+					// action
+					drawCards(author, this.deck, 1);
+					this.broadcastExcept(author, "**" + author.getName() + "** has chosen to draw.");
+
+					// response
+					this.message(author, "You drew *" + hand.get(hand.size() - 1).name + "*").queue();
+
+					// finalise
+					this.nextTurn();
+					this.announcePlayerTurn();
+				} else {
+					int cardIndex = Integer.parseInt(message);
+					Card attempted = hand.get(cardIndex);
+					boolean villainWinGame = false;
+
+					// if allowed to play
+					if (this.previous.canPlayNormally(this.location, attempted.name) || (villainWinGame = onlyVillains(hand))) {
+						// remove card from hand and play it
+						this.previous = hand.remove(cardIndex);
+
+						// announce action to other players
+						this.broadcastExcept(author, "**" + author.getName() + "** has chosen to play *" + this.previous.name + "*.");
+
+						// RESOLVE CARD ACTIONS!
+
+						// check if villains win
+						if (villainWinGame) {
+							this.broadcast("**" + author.getName() + "** has *escaped* as the villain, **winning** the game! Session ending.");
+							this.terminate();
+						}
+
+						boolean scotlandYardEffect = false;
+
+						// if it's a location card, set it as location
+						if (this.previous.hasCategory(Category.LOCATION)) {
+							this.location = this.previous;
+
+							if (this.previous == Card.SCOTLAND_YARD) {
+								scotlandYardEffect = true;
+							}
+						}
+
+						// Otherwise check if requires a target
+						//						// Check if an alibi check needs to be made
+						//						else if (this.previous.hasCategory(Category.CAN_ALIBI)) {
+						//							
+						//						}
+						//						// otherwise resolve specific card actions
+						//						else switch (attempted.name) {
+						//						case "Disguise":
+						//							this.message(author, message).queue();
+						//							break;
+						//						}
+
+						this.nextTurn();
+
+						if (scotlandYardEffect) {
+							drawCards(this.users.get(this.turn), this.deck, 2);
+						}
+
+						this.announcePlayerTurn();
+					} else {
+						this.message(author, "Invalid Card.");
+					}
+				}
+			} catch (NumberFormatException e) {
+				System.out.println("ignored:");
+				e.printStackTrace(System.out);
+			} catch (Exception e) {
+				this.message(author, "Error processing message: " + e.getLocalizedMessage()).complete();
+				e.printStackTrace();
+			}
+		}
+	}
+
+	public boolean terminateIfOverdue() {
+		if (System.currentTimeMillis() > this.terminationTime) {
+			this.terminate();
+			return true;
+		}
+
+		return false;
+	}
+
+	public void terminate() {
+		Main.GAMES.remove(this.id);
+
+		for (User user : this.users) {
+			Main.USER_2_GAME.remove(user);
+		}
+	}
+
+	// PRIVATE METHODS
+
+	private MessageAction message(User user, String message) {
+		return user.openPrivateChannel().complete().sendMessage(message);
+	}
+
+	private void broadcast(String message) {
+		this.broadcastExcept(null, message);
+	}
+
+	private void broadcastExcept(User exempt, String message) {
+		for (User user : this.users) {
+			if (user != exempt) {
+				try {
+					message(user, message).queue();
+				} catch (Exception e) {
+					System.err.println("Error sending broadcast PM");
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+
 	private void startGame() {
 		this.started = true;
 		Collections.shuffle(this.users);
-		this.broadcast("The game is afoot! Initialising Game!");
+		this.broadcast("The game is afoot! Initialising Game!\nRemember, **Villain**, **Detective**, and **Alibi** cards have special play conditions and are not listed on the card's 'can play next' list:\n- **Villain** cards can be played only when you only have villain cards remaining.\n- **Detective** cards (Holmes, Mycroft, Watson) can be played after any non-location card. Mycroft has the added condition that you must not be in the country.\n- **Alibi** can only be played when you are prompted whether you wish to use an alibi to cancel a defendable card effect.");
 		int toAdd = this.capacity * 6 - 2;
 
 		LinkedList<Card> deck = createDeck();
@@ -101,8 +244,14 @@ public class Game {
 		this.announcePlayerTurn();
 	}
 
-	public void announcePlayerTurn() {
+	private void announcePlayerTurn() {
 		try {
+			this.broadcast(Main.appendArray(new StringBuilder("We are in *")
+					.append(this.location.name)
+					.append("*.\n**Previous Card**: *")
+					.append(this.previous.name)
+					.append("*\n**Allowed Next Cards**:"), this.previous.allowsNext).toString());
+
 			User user = this.users.get(this.turn);
 			StringBuilder handList = new StringBuilder();
 			List<Card> hand = this.hands.get(user);
@@ -136,92 +285,8 @@ public class Game {
 		}
 	}
 
-	public void removePlayer(User user) {
-		if (this.users.contains(user)) {
-			this.users.remove(user);
-			Main.USER_2_GAME.remove(user, this);
-
-			if (this.users.isEmpty()) {
-				this.terminate();
-			}
-		}
-	}
-
-	public boolean terminateIfOverdue() {
-		if (System.currentTimeMillis() > this.terminationTime) {
-			this.terminate();
-			return true;
-		}
-
-		return false;
-	}
-
-	public void terminate() {
-		Main.GAMES.remove(this.id);
-
-		for (User user : this.users) {
-			Main.USER_2_GAME.remove(user);
-		}
-	}
-
-	public void process(User author, String message) {
-		if (this.users.get(this.turn) == author) {
-			try {
-				List<Card> hand = this.hands.get(author);
-
-				if (hand.isEmpty()) {
-					// TODO rules for arrest/draw of non-villains
-					this.nextTurn();
-					this.announcePlayerTurn();
-				} else if (message.equals("draw")) {
-					// action
-					drawCards(author, this.deck, 1);
-					this.broadcastExcept(author, "**" + author.getName() + "** has chosen to draw.");
-
-					// response
-					this.message(author, "You drew *" + hand.get(hand.size() - 1) + "*").queue();
-
-					// finalise
-					this.nextTurn();
-					this.announcePlayerTurn();
-				} else {
-					int cardIndex = Integer.parseInt(message);
-					Card played = hand.remove(cardIndex);
-
-					this.broadcastExcept(author, "**" + author.getName() + "** has chosen to play *" + played.name + "*.");
-
-					this.nextTurn();
-					this.announcePlayerTurn();
-				}
-			} catch (NumberFormatException e) {
-				System.out.println("ignored:");
-				e.printStackTrace(System.out);
-			} catch (Exception e) {
-				this.message(author, "Error processing message: " + e.getLocalizedMessage()).complete();
-				e.printStackTrace();
-			}
-		}
-	}
-
-	private MessageAction message(User user, String message) {
-		return user.openPrivateChannel().complete().sendMessage(message);
-	}
-
-	private void broadcast(String message) {
-		this.broadcastExcept(null, message);
-	}
-
-	private void broadcastExcept(User exempt, String message) {
-		for (User user : this.users) {
-			if (user != exempt) {
-				try {
-					message(user, message).queue();
-				} catch (Exception e) {
-					System.err.println("Error sending broadcast PM");
-					e.printStackTrace();
-				}
-			}
-		}
+	private static boolean onlyVillains(List<Card> hand) {
+		return hand.stream().allMatch(card -> card.hasCategory(Category.VILLAIN));
 	}
 
 	private static LinkedList<Card> createDeck() {

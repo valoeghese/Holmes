@@ -117,6 +117,8 @@ public class Main extends ListenerAdapter {
 
 		if (USER_2_GAME.containsKey(author)) {
 			USER_2_GAME.get(author).process(author, event.getMessage().getContentRaw());
+		} else {
+			event.getChannel().sendMessage("You are not in a game, or your game session expired!").queue();
 		}
 	}
 
@@ -134,5 +136,19 @@ public class Main extends ListenerAdapter {
 			e.printStackTrace();
 			throw new RuntimeException("Exception running bot!", e);
 		}
+	}
+
+	public static StringBuilder appendArray(StringBuilder stringBuilder, String[] allowsNext) {
+		stringBuilder.append('[');
+
+		for (int i = 0; i < allowsNext.length; ++i) {
+			if (i > 0) {
+				stringBuilder.append(", ");
+			}
+
+			stringBuilder.append(allowsNext[i]);
+		}
+
+		return stringBuilder;
 	}
 }
