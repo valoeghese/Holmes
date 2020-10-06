@@ -39,7 +39,8 @@ public class Game {
 
 	private long terminationTime;
 	private boolean started = false;
-	private int pause = 0; // whether to pause the game for an out-of-turn player response. 1 = player name response, 2 = alibi response
+	private int pause = 0; // whether to pause the game for an out-of-turn player response.
+	// 1 = player name response, 2 = alibi response, 3 = alibi response to no-hand arrest
 
 	private void updateTime() {
 		this.terminationTime = System.currentTimeMillis() + 1000 * 60 * 5; // 5 minute due time
@@ -76,245 +77,279 @@ public class Game {
 			return;
 		}
 
+		this.updateTime();
+
+		try {
+			switch (this.pause) {
+			case 2:
+			case 3:
+				this.processAsAlibi(author, message);
+				break;
+			case 1:
+				this.processAsTarget(author, message);
+				break;
+			default:
+				this.processAsGeneralTurn(author, message);
+				break;
+			}
+		} catch (NumberFormatException e) {
+			System.out.println("ignored:");
+			e.printStackTrace(System.out);
+		} catch (Exception e) {
+			this.message(author, "Error processing message: " + e.getLocalizedMessage()).complete();
+			e.printStackTrace();
+		}
+	}
+
+	private void processAsTarget(User author, String message) {
 		if (this.users.get(this.turn) == author) {
-			try {
-				Card previous;
+			Card previous = this.apparentDiscard.get(this.apparentDiscard.size() - 1);
 
-				switch (this.pause) {
-				case 2:
-					switch (message.charAt(0)) {
-					case 'n':
-						previous = this.apparentDiscard.get(this.apparentDiscard.size() - 1);
-
-						// Switching doesn't work on objects and switching on string name bad.
-						// So a yandev meme level else if statement is actually *best option* probably
-						// And no, I don't want to overcomplicate things by making it a method on Card.
-
-						if (previous == Card.WATSON) {
-							this.apparentDiscard.remove(this.apparentDiscard.size() - 1);
-
-							if (!this.arrest(this.users.get(this.turn), this.target)) {
-								// let know target's cards
-								this.messageHandCards(this.target.getName() + "'s hand:", this.users.get(this.turn), this.target);
-							}
-						} else if (previous == Card.I_SUSPECT) {
-							// TODO e
-						} else if (previous == Card.INSPECTOR) {
-							//TODO f
-						} else if (previous == Card.ARREST) {
-							User turnUser = this.users.get(this.turn);
-
-							if (!this.arrest(turnUser, this.target)) {
-								List<Card> targetHand = this.hands.get(this.target);
-
-								// Add cards to arrestee's hand
-								this.hands.get(turnUser).addAll(targetHand);
-								this.messageHandCards("New cards added to your hand from " + this.target.getName() + "'s hand:", turnUser, this.target);
-
-								// draw new cards
-								List<Card> nextHand = new ArrayList<>();
-								this.hands.put(this.target, nextHand);
-								this.drawCards(this.target, this.deck, targetHand.size());
-
-								this.messageHandCards("New cards in your hand:", this.target, nextHand);
-							}
-						}
-
-						this.pause = 0;
-						this.nextTurn();
-						this.announcePlayerTurn();
-						break;
-					case 'y':
-						// if can actually alibi, use it. otherwise scold.
-						if (this.hands.get(author).contains(Card.ALIBI)) {
-							this.hands.get(author).remove(Card.ALIBI);
-							this.broadcast(author.getName() + " used an alibi!");
-							this.pause = 0;
-							this.nextTurn();
-							this.announcePlayerTurn();
-						} else {
-							this.message(author, "You don't have an Alibi card, silly.").queue();
-						}
+			if (this.users.stream().map(user -> user.getAsTag()).anyMatch(s -> s.equals(message))) {
+				// get target
+				for (User user : this.users) {
+					if (user.getAsTag().equals(message)) {
+						this.target = user;
 						break;
 					}
-					break;
-				case 1:
-					previous = this.apparentDiscard.get(this.apparentDiscard.size() - 1);
+				}
 
+				if (previous.hasCategory(Category.CAN_ALIBI)) {
+					// message target
+					this.message(this.target, "You are the target of the card \"" + previous.name + "\". Do you wish to use an alibi? y/n.").queue();
+					this.pause = 2;
+				} else {
+					if (previous == Card.HOLMES) {
+						this.apparentDiscard.remove(this.apparentDiscard.size() - 1); // so that play as normal afterwards
+
+						if (!this.arrest(this.users.get(this.turn), this.target)) {
+							// let know target's cards
+							this.messageHandCards(this.target.getName() + "'s hand:", this.users.get(this.turn), this.target);
+						}
+					} else if (previous == Card.MYCROFT) {
+						this.apparentDiscard.remove(this.apparentDiscard.size() - 1);
+						this.broadcast(author.getName() + " is swapping hands with " + this.target + "!");
+
+						// swap
+						List<Card> targetOld = this.hands.get(this.target);
+						List<Card> authorOld = this.hands.get(author);
+						this.hands.put(author, targetOld);
+						this.hands.put(this.target, authorOld);
+
+						// let know new target's cards
+						this.messageHandCards("New cards in your hand:", this.target, authorOld);
+
+						// let know new author's cards
+						this.messageHandCards("New cards in your hand:", author, targetOld);
+					} else if (previous == Card.DISGUISE) {
+						this.revealCards(this.target, author);
+					}
+
+					this.pause = 0;
+					this.nextTurn();
+					this.announcePlayerTurn();
+				}
+			} else {
+				this.message(author, "Not a valid user in game! Valid options " + this.users.stream().map(user -> user.getAsTag()).collect(Collectors.joining(" "))).queue();
+			}
+		}
+	}
+
+	private void processAsGeneralTurn(User author, String message) {
+		if (this.users.get(this.turn) == author) {
+			List<Card> hand = this.hands.get(author);
+
+			if (hand.isEmpty() && message.startsWith("arrest ")) {
+				String[] args = message.split(" ");
+
+				if (args.length > 1) {
+					// if target exists
 					if (this.users.stream().map(user -> user.getAsTag()).anyMatch(s -> s.equals(message))) {
 						// get target
 						for (User user : this.users) {
 							if (user.getAsTag().equals(message)) {
 								this.target = user;
+								this.pause = 3; // no-hand arrest
 								break;
 							}
-						}
-
-						if (previous.hasCategory(Category.CAN_ALIBI)) {
-							// message target
-							this.message(this.target, "You are the target of the card \"" + previous.name + "\". Do you wish to use an alibi? y/n.").queue();
-							this.pause = 2;
-						} else {
-							if (previous == Card.HOLMES) {
-								this.apparentDiscard.remove(this.apparentDiscard.size() - 1); // so that play as normal afterwards
-
-								if (!this.arrest(this.users.get(this.turn), this.target)) {
-									// let know target's cards
-									this.messageHandCards(this.target.getName() + "'s hand:", this.users.get(this.turn), this.target);
-								}
-							} else if (previous == Card.MYCROFT) {
-								this.apparentDiscard.remove(this.apparentDiscard.size() - 1);
-								this.broadcast(author.getName() + " is swapping hands with " + this.target + "!");
-
-								// swap
-								List<Card> targetOld = this.hands.get(this.target);
-								List<Card> authorOld = this.hands.get(author);
-								this.hands.put(author, targetOld);
-								this.hands.put(this.target, authorOld);
-
-								// let know new target's cards
-								this.messageHandCards("New cards in your hand:", this.target, authorOld);
-
-								// let know new author's cards
-								this.messageHandCards("New cards in your hand:", author, targetOld);
-							} else if (previous == Card.DISGUISE) {
-								this.revealCards(this.target, author);
-							}
-
-							this.pause = 0;
-							this.nextTurn();
-							this.announcePlayerTurn();
 						}
 					} else {
 						this.message(author, "Not a valid user in game! Valid options " + this.users.stream().map(user -> user.getAsTag()).collect(Collectors.joining(" "))).queue();
 					}
-					break;
-				default:
-					List<Card> hand = this.hands.get(author);
+				} else {
+					this.message(author, "\"Arrest\" action requires a discord tag argument.");
+				}
+			} else if (message.equals("draw")) {
+				// action
+				drawCards(author, this.deck, 1);
+				this.broadcastExcept(author, "**" + author.getName() + "** has chosen to draw.");
 
-					if (hand.isEmpty()) {
-						// TODO rules for arrest/draw of non-villains when empty hand
-						this.nextTurn();
-						this.announcePlayerTurn();
-					} else if (message.equals("draw")) {
-						// action
-						drawCards(author, this.deck, 1);
-						this.broadcastExcept(author, "**" + author.getName() + "** has chosen to draw.");
+				// response
+				this.message(author, "You drew *" + hand.get(hand.size() - 1).name + "*").queue();
 
-						// response
-						this.message(author, "You drew *" + hand.get(hand.size() - 1).name + "*").queue();
+				// finalise
+				this.nextTurn();
+				this.announcePlayerTurn();
+			} else {
+				int cardIndex = Integer.parseInt(message);
+				Card attempted = hand.get(cardIndex);
+				boolean villainEscape = false;
 
-						// finalise
-						this.nextTurn();
-						this.announcePlayerTurn();
-					} else {
-						int cardIndex = Integer.parseInt(message);
-						Card attempted = hand.get(cardIndex);
-						boolean villainEscape = false;
+				Card previous = this.apparentDiscard.get(this.apparentDiscard.size() - 1);
 
-						previous = this.apparentDiscard.get(this.apparentDiscard.size() - 1);
+				// if allowed to play
+				if (previous.canPlayNormally(this.location, attempted.name) || (villainEscape = onlyVillains(hand))) {
+					// remove card from hand and play it
+					previous = hand.remove(cardIndex);
+					this.apparentDiscard.add(previous);
+					this.trueDiscard.add(previous);
 
-						// if allowed to play
-						if (previous.canPlayNormally(this.location, attempted.name) || (villainEscape = onlyVillains(hand))) {
-							// remove card from hand and play it
-							previous = hand.remove(cardIndex);
-							this.apparentDiscard.add(previous);
-							this.trueDiscard.add(previous);
+					// announce action to other players
+					this.broadcastExcept(author, "**" + author.getName() + "** has chosen to play *" + previous.name + "*.");
 
-							// announce action to other players
-							this.broadcastExcept(author, "**" + author.getName() + "** has chosen to play *" + previous.name + "*.");
+					// RESOLVE CARD ACTIONS!
 
-							// RESOLVE CARD ACTIONS!
+					// check if villains escape
+					if (villainEscape) {
+						this.broadcast("**" + author.getName() + "** has *escaped* as the villain!");
+						this.endGame();
+					}
 
-							// check if villains escape
-							if (villainEscape) {
-								this.broadcast("**" + author.getName() + "** has *escaped* as the villain!");
-								this.endGame();
-							}
+					int specialEffect = 0;
 
-							int specialEffect = 0;
+					// As detailed earlier, a yandev-meme level else if is the best option here
+					// Aside from putting methods on `Card`, which I don't want to as it over-complicates the otherwise simple program
 
-							// As detailed earlier, a yandev-meme level else if is the best option here
-							// Aside from putting methods on `Card`, which I don't want to as it over-complicates the otherwise simple program
+					// if it's a location card, set it as location
+					if (previous.hasCategory(Category.LOCATION)) {
+						this.location = previous;
 
-							// if it's a location card, set it as location
-							if (previous.hasCategory(Category.LOCATION)) {
-								this.location = previous;
-
-								if (previous == Card.SCOTLAND_YARD) {
-									specialEffect = 1;
-								}
-							}
-							// Otherwise check if requires a target
-							else if (previous.hasCategory(Category.REQUIRES_TARGET)) {
-								this.pause = 1;
-								this.message(author, "Type the tag of the target player, in the format Username#0000.").queue();
-								specialEffect = -1; // no next turn yet
-							}
-							// Otherwise check the remaining cards
-							else if (previous == Card.THICK_FOG) {
-								Object2IntMap<User> cardsInHand = new Object2IntArrayMap<>();
-								LinkedList<Card> allHands = new LinkedList<>();
-
-								// collect counts and cards
-								this.hands.forEach((user, cards) -> {
-									cardsInHand.put(user, cards.size());
-									allHands.addAll(cards);
-								});
-
-								// shuffle
-								Collections.shuffle(allHands);
-
-								// redeal
-								cardsInHand.forEach((user, count) -> {
-									List<Card> newHand = new ArrayList<>();
-									StringBuilder handList = new StringBuilder("New cards in your hand:");
-
-									for (int i = 0; i < count; ++i) {
-										Card card = allHands.remove();
-										newHand.add(card);
-										handList.append("\n- " + card.name + " (" + card.points + " points)");
-									}
-
-									this.hands.put(user, newHand);
-
-									this.message(user, handList.toString()).queue();
-								});
-							} else if (previous == Card.CLUE) {
-								User previousPlayer = this.previousPlayer();
-								this.revealCards(previousPlayer, author);
-							} else if (previous == Card.TELEGRAM) {
-								specialEffect = 2;
-							} else if (previous == Card.HANSOM) {
-								this.broadcast(this.location == Card.THE_COUNTRY ? "We are heading to another countryside location." : "We are heading to another city location.");
-							} else if (previous == Card.TRAIN) {
-								this.broadcast(this.location == Card.THE_COUNTRY ? "We are heading out of the country." : "We are heading out of the city.");
-							}
-
-							if (specialEffect > -1) {
-								this.nextTurn();
-
-								if (specialEffect == 1) {
-									this.message(this.users.get(this.turn), "Uh oh! Scotland Yard was just played, causing you to draw two cards.").queue();
-									drawCards(this.users.get(this.turn), this.deck, 2);
-								} else if (specialEffect == 2) {
-									this.message(this.users.get(this.turn), "Uh oh! You were telegrammed! +10 points.").queue();
-									this.addPoints(this.users.get(this.turn), 10);
-								}
-
-								this.announcePlayerTurn();
-							}
-						} else {
-							this.message(author, "Invalid Card.").queue();
+						if (previous == Card.SCOTLAND_YARD) {
+							specialEffect = 1;
 						}
 					}
+					// Otherwise check if requires a target
+					else if (previous.hasCategory(Category.REQUIRES_TARGET)) {
+						this.pause = 1;
+						this.message(author, "Type the tag of the target player, in the format Username#0000.").queue();
+						specialEffect = -1; // no next turn yet
+					}
+					// Otherwise check the remaining cards
+					else if (previous == Card.THICK_FOG) {
+						Object2IntMap<User> cardsInHand = new Object2IntArrayMap<>();
+						LinkedList<Card> allHands = new LinkedList<>();
+
+						// collect counts and cards
+						this.hands.forEach((user, cards) -> {
+							cardsInHand.put(user, cards.size());
+							allHands.addAll(cards);
+						});
+
+						// shuffle
+						Collections.shuffle(allHands);
+
+						// redeal
+						cardsInHand.forEach((user, count) -> {
+							List<Card> newHand = new ArrayList<>();
+							StringBuilder handList = new StringBuilder("New cards in your hand:");
+
+							for (int i = 0; i < count; ++i) {
+								Card card = allHands.remove();
+								newHand.add(card);
+								handList.append("\n- " + card.name + " (" + card.points + " points)");
+							}
+
+							this.hands.put(user, newHand);
+
+							this.message(user, handList.toString()).queue();
+						});
+					} else if (previous == Card.CLUE) {
+						User previousPlayer = this.previousPlayer();
+						this.revealCards(previousPlayer, author);
+					} else if (previous == Card.TELEGRAM) {
+						specialEffect = 2;
+					} else if (previous == Card.HANSOM) {
+						this.broadcast(this.location == Card.THE_COUNTRY ? "We are heading to another countryside location." : "We are heading to another city location.");
+					} else if (previous == Card.TRAIN) {
+						this.broadcast(this.location == Card.THE_COUNTRY ? "We are heading out of the country." : "We are heading out of the city.");
+					}
+
+					if (specialEffect > -1) {
+						this.nextTurn();
+
+						if (specialEffect == 1) {
+							this.message(this.users.get(this.turn), "Uh oh! Scotland Yard was just played, causing you to draw two cards.").queue();
+							drawCards(this.users.get(this.turn), this.deck, 2);
+						} else if (specialEffect == 2) {
+							this.message(this.users.get(this.turn), "Uh oh! You were telegrammed! +10 points.").queue();
+							this.addPoints(this.users.get(this.turn), 10);
+						}
+
+						this.announcePlayerTurn();
+					}
+				} else {
+					this.message(author, "Invalid Card.").queue();
 				}
-			} catch (NumberFormatException e) {
-				System.out.println("ignored:");
-				e.printStackTrace(System.out);
-			} catch (Exception e) {
-				this.message(author, "Error processing message: " + e.getLocalizedMessage()).complete();
-				e.printStackTrace();
+			}
+		}
+	}
+
+	private void processAsAlibi(User author, String message) {
+		if (this.target == author) {
+			switch (message.charAt(0)) {
+			case 'n':
+				Card previous = this.apparentDiscard.get(this.apparentDiscard.size() - 1);
+
+				// Switching doesn't work on objects and switching on string name bad.
+				// So a yandev meme level else if statement is actually *best option* probably
+				// And no, I don't want to overcomplicate things by making it a method on Card.
+
+				if (previous == Card.WATSON) {
+					this.apparentDiscard.remove(this.apparentDiscard.size() - 1);
+
+					if (!this.arrest(this.users.get(this.turn), this.target)) {
+						// let know target's cards
+						this.messageHandCards(this.target.getName() + "'s hand:", this.users.get(this.turn), this.target);
+					}
+				} else if (previous == Card.ARREST || this.pause == 3) {
+					User turnUser = this.users.get(this.turn);
+
+					if (!this.arrest(turnUser, this.target)) {
+						List<Card> targetHand = this.hands.get(this.target);
+
+						// Add cards to arrestee's hand
+						this.hands.get(turnUser).addAll(targetHand);
+						this.messageHandCards("New cards added to your hand from " + this.target.getName() + "'s hand:", turnUser, this.target);
+
+						// draw new cards
+						List<Card> nextHand = new ArrayList<>();
+						this.hands.put(this.target, nextHand);
+						this.drawCards(this.target, this.deck, targetHand.size());
+
+						this.messageHandCards("New cards in your hand:", this.target, nextHand);
+					}
+				} else if (previous == Card.I_SUSPECT) {
+					// TODO e
+				} else if (previous == Card.INSPECTOR) {
+					//TODO f
+				}
+
+				this.pause = 0;
+				this.nextTurn();
+				this.announcePlayerTurn();
+				break;
+			case 'y':
+				// if can actually alibi, use it. otherwise scold.
+				if (this.hands.get(author).contains(Card.ALIBI)) {
+					this.hands.get(author).remove(Card.ALIBI);
+					this.broadcast(author.getName() + " used an alibi!");
+					this.pause = 0;
+					this.nextTurn();
+					this.announcePlayerTurn();
+				} else {
+					this.message(author, "You don't have an Alibi card, silly.").queue();
+				}
+				break;
 			}
 		}
 	}
