@@ -67,8 +67,8 @@ public class Card {
 	public static final Card VILLAIN_30 = new Card("(Villain) John Clay", 30).categories(Category.VILLAIN);
 	public static final Card VILLAIN_40 = new Card("(Villain) Colonel Moran", 40).categories(Category.VILLAIN);
 	public static final Card VILLAIN_50 = new Card("(Villain) Professor Moriarty", 50).categories(Category.VILLAIN);
-	public static final Card TRAIN = new Card("Train", 1).categories(Category.MOVEMENT);
-	public static final Card HANSOM = new Card("Hansom", 1).categories(Category.MOVEMENT);
+	public static final Card TRAIN = new Card("Train", 1, "A 'different' location").categories(Category.MOVEMENT);
+	public static final Card HANSOM = new Card("Hansom", 1, "A 'similar' location").categories(Category.MOVEMENT);
 	public static final Card THICK_FOG = new Card("Thick Fog", 5, "London", "Baker Street", "Scotland Yard", "The Country").categories(Category.MOVEMENT);
 	public static final Card LONDON = new Card("London", 1, "Arrest", "Clue", "Disguise", "Train", "Hansom").categories(Category.LOCATION);
 	public static final Card BAKER_STREET = new Card("Baker Street", 2, "Disguise", "Train", "Hansom", "I Suspect", "Telegram").categories(Category.LOCATION);

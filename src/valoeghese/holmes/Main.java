@@ -142,10 +142,12 @@ public class Main extends ListenerAdapter {
 	public void onPrivateMessageReceived(PrivateMessageReceivedEvent event) {
 		User author = event.getAuthor();
 
-		if (USER_2_GAME.containsKey(author)) {
-			USER_2_GAME.get(author).process(author, event.getMessage().getContentRaw());
-		} else {
-			event.getChannel().sendMessage("You are not in a game, or your game session expired!").queue();
+		if (!author.isBot()) {
+			if (USER_2_GAME.containsKey(author)) {
+				USER_2_GAME.get(author).process(author, event.getMessage().getContentRaw());
+			} else {
+				event.getChannel().sendMessage("You are not in a game, or your game session expired!").queue();
+			}
 		}
 	}
 
@@ -161,8 +163,6 @@ public class Main extends ListenerAdapter {
 	}
 
 	public static StringBuilder appendArray(StringBuilder stringBuilder, String[] allowsNext) {
-		stringBuilder.append('[');
-
 		for (int i = 0; i < allowsNext.length; ++i) {
 			if (i > 0) {
 				stringBuilder.append(", ");

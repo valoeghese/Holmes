@@ -123,7 +123,9 @@ public class Game {
 					if (previous == Card.HOLMES) {
 						this.apparentDiscard.remove(this.apparentDiscard.size() - 1); // so that play as normal afterwards
 
-						if (!this.arrest(this.users.get(this.turn), this.target)) {
+						if (this.arrest(this.users.get(this.turn), this.target)) {
+							return;
+						} else {
 							// let know target's cards
 							this.messageHandCards(this.target.getName() + "'s hand:", this.users.get(this.turn), this.target);
 						}
@@ -164,12 +166,15 @@ public class Game {
 				String[] args = message.split(" ");
 
 				if (args.length > 1) {
+					this.broadcastExcept(author, "**" + author.getName() + "** has chosen to arrest.");
+
 					// if target exists
-					if (this.users.stream().map(user -> user.getAsTag()).anyMatch(s -> s.equals(message))) {
+					if (this.users.stream().map(user -> user.getAsTag()).anyMatch(s -> s.equals(args[1]))) {
 						// get target
 						for (User user : this.users) {
-							if (user.getAsTag().equals(message)) {
+							if (user.getAsTag().equals(args[1])) {
 								this.target = user;
+								this.message(this.target, "You are being arrested! Do you wish to use an alibi? y/n.").queue();
 								this.pause = 3; // no-hand arrest
 								break;
 							}
@@ -214,6 +219,7 @@ public class Game {
 					if (villainEscape) {
 						this.broadcast("**" + author.getName() + "** has *escaped* as the villain!");
 						this.endGame();
+						return;
 					}
 
 					int specialEffect = 0;
@@ -289,7 +295,7 @@ public class Game {
 						this.announcePlayerTurn();
 					}
 				} else {
-					this.message(author, "Invalid Card.").queue();
+					this.message(author, "You cannot play this card currently.").queue();
 				}
 			}
 		}
@@ -308,14 +314,18 @@ public class Game {
 				if (previous == Card.WATSON) {
 					this.apparentDiscard.remove(this.apparentDiscard.size() - 1);
 
-					if (!this.arrest(this.users.get(this.turn), this.target)) {
+					if (this.arrest(this.users.get(this.turn), this.target)) {
+						return;
+					} else {
 						// let know target's cards
 						this.messageHandCards(this.target.getName() + "'s hand:", this.users.get(this.turn), this.target);
 					}
 				} else if (previous == Card.ARREST || this.pause == 3) {
 					User turnUser = this.users.get(this.turn);
 
-					if (!this.arrest(turnUser, this.target)) {
+					if (this.arrest(turnUser, this.target)) {
+						return;
+					} else {
 						List<Card> targetHand = this.hands.get(this.target);
 
 						// Add cards to arrestee's hand
@@ -583,7 +593,7 @@ public class Game {
 
 	private void drawCards(User user, Queue<Card> deck, int count, Consumer<Card> callback) {
 		if (!deck.isEmpty()) {
-			count = Math.max(deck.size(), count);
+			count = Math.min(deck.size(), count);
 			List<Card> cards = this.hands.computeIfAbsent(user, u -> new ArrayList<>());
 
 			for (int i = 0; i < count; ++i) {
