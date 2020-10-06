@@ -30,7 +30,24 @@ public class Main extends ListenerAdapter {
 		User author = message.getAuthor();
 
 		if (!author.isBot()) {
-			if (message.getContentRaw().startsWith("s.start")) {
+			if (message.getContentRaw().equals("s.help")) {
+				event.getChannel().sendMessage("Welcome to \"Holmes\", a card game about deception and trickery. This game is an unoffcial online port of a physical Sherlock Holmes card game, and I recommend getting the real game if you enjoy this! (pls don't sue me)\n"
+						+ "It is recommended that all players get into a voice call with each other when playing.\n"
+						+ "__**Rules**__\n"
+						+ "- Each player starts with 6 cards.\n"
+						+ "- One person will start with the first villain card, making them the starting villain. Three more villain cards exist in the deck, and thus multiple competing villains can arise.\n"
+						+ "- One person will start with the \"Game if Afoot\" card, which they play as the starting player.\n"
+						+ "- Each card has a list of cards in the \"next cards\" section about what can be played next.\n"
+						+ "- Some cards have special conditions for playing, and will not be listed in the \"next cards\" section (detailed when starting a new game with `s.start [player count]`.)\n\n"
+						+ "__**Villain**__\n"
+						+ "- As the villain, you are trying to either __escape__ (by only having villain cards in your hand, allowing you to play one to escape with all of them), __arrest another villain__, or __use Thick Fog__ to reshuffle the player's hands or __Mycroft__ to exchange hands, providing a chance to switch sides.\n"
+						+ "- You must do this while trying to escape being arrested yourself.").queue();
+				event.getChannel().sendMessage("__**Non Villain**__\n"
+						+ "- As a non villain, you are trying to find clues as to who may be the villain. This can be done through interactions with them (such as in your group vc), by looking at their actions, or through the help of the cards \"clue\" and \"disguise\"\n"
+						+ "- Once you are confident you know who the villain is, you can make an arrest. This can be done either by having no cards in your hand, or playing an Arrest, Watson, or Holmes card. Additionally, **Inspector** counts as an Arrest if you are at Scotland Yard. Unless you play Watson or Holmes, there is a penalty of adding the target player's hand to yours and the target player drawing a new hand for a false arrest. All of these actions but the Holmes card can be countered by an Alibi.\n\n"
+						+ "__**Scoring**__\n"
+						+ "- At the end of the game, all players add up the point values of cards in their hand. A player may already have some points from the use of the **Telegram** card earlier in the game. Unarrested villains escape and are not counted. If a player successfully made an arrest, the points value of the arrested villain(s) is deducted from the arrestee's points. The player with the **least points** wins.").queue();
+			} else if (message.getContentRaw().startsWith("s.start")) {
 				try {
 					String[] params = message.getContentRaw().split(" ");
 

@@ -27,9 +27,20 @@ public class Card {
 		return this.categories != null && this.categories.contains(category);
 	}
 
-	public boolean canPlayNormally(Card location, String card) {
-		if (BY_NAME.get(card).hasCategory(Category.DETECTIVE)) {
-			return !this.hasCategory(Category.MOVEMENT) && (!card.equals("Mycroft") || location != THE_COUNTRY);
+	public boolean canPlayNormally(Card location, String nextCard) {
+		Card nextCardCard = BY_NAME.get(nextCard);
+
+		if (nextCardCard.hasCategory(Category.DETECTIVE)) {
+			return !this.hasCategory(Category.MOVEMENT) && (!nextCard.equals("Mycroft") || location != THE_COUNTRY);
+		}
+
+		if (this.hasCategory(Category.MOVEMENT)) {
+			if (this == Card.HANSOM) {
+				// I know that nxor is probably better but this is more readable
+				return (nextCardCard == Card.THE_COUNTRY) == (location == Card.THE_COUNTRY);
+			} else {
+				return (nextCardCard == Card.THE_COUNTRY) != (location == Card.THE_COUNTRY);
+			}
 		}
 
 		if (this.allowsNext == null) {
@@ -37,7 +48,7 @@ public class Card {
 		}
 
 		for (String next : this.allowsNext) {
-			if (next.equals(card)) {
+			if (next.equals(nextCard)) {
 				return true;
 			}
 		}

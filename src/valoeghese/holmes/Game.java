@@ -21,7 +21,7 @@ public class Game {
 		this.terminationTime = System.currentTimeMillis() + 1000 * 60 * 10; 
 		Main.GAMES.put(id, this);
 		this.id = id;
-		this.discard.add(Card.NONE);
+		this.apparentDiscard.add(Card.NONE);
 		this.trueDiscard.add(Card.NONE);		
 	}
 
@@ -33,7 +33,7 @@ public class Game {
 	private Queue<Card> deck;
 	private int turn = 0;
 	private Card location = Card.BAKER_STREET;
-	private List<Card> discard = new ArrayList<>(); // hack
+	private List<Card> apparentDiscard = new ArrayList<>(); // hack
 	private List<Card> trueDiscard = new ArrayList<>(); // the list of actual discard stuff
 	private User target;
 
@@ -82,23 +82,64 @@ public class Game {
 
 				switch (this.pause) {
 				case 2:
-					previous = this.discard.get(this.discard.size() - 1);
+					switch (message.charAt(0)) {
+					case 'n':
+						previous = this.apparentDiscard.get(this.apparentDiscard.size() - 1);
 
-					// Switching doesn't work on objects and switching on string name bad.
-					// So a yandev meme level else if statement is actually *best option* probably
-					// TODO everything
-					if (previous == Card.WATSON) {
-						this.discard.remove(this.discard.size() - 1);
-					} else if (previous == Card.I_SUSPECT) {
+						// Switching doesn't work on objects and switching on string name bad.
+						// So a yandev meme level else if statement is actually *best option* probably
+						// And no, I don't want to overcomplicate things by making it a method on Card.
 
-					} else if (previous == Card.INSPECTOR) {
+						if (previous == Card.WATSON) {
+							this.apparentDiscard.remove(this.apparentDiscard.size() - 1);
 
-					} else if (previous == Card.ARREST) {
+							if (!this.arrest(this.users.get(this.turn), this.target)) {
+								// let know target's cards
+								this.messageHandCards(this.target.getName() + "'s hand:", this.users.get(this.turn), this.target);
+							}
+						} else if (previous == Card.I_SUSPECT) {
+							// TODO e
+						} else if (previous == Card.INSPECTOR) {
+							//TODO f
+						} else if (previous == Card.ARREST) {
+							User turnUser = this.users.get(this.turn);
 
+							if (!this.arrest(turnUser, this.target)) {
+								List<Card> targetHand = this.hands.get(this.target);
+
+								// Add cards to arrestee's hand
+								this.hands.get(turnUser).addAll(targetHand);
+								this.messageHandCards("New cards added to your hand from " + this.target.getName() + "'s hand:", turnUser, this.target);
+
+								// draw new cards
+								List<Card> nextHand = new ArrayList<>();
+								this.hands.put(this.target, nextHand);
+								this.drawCards(this.target, this.deck, targetHand.size());
+
+								this.messageHandCards("New cards in your hand:", this.target, nextHand);
+							}
+						}
+
+						this.pause = 0;
+						this.nextTurn();
+						this.announcePlayerTurn();
+						break;
+					case 'y':
+						// if can actually alibi, use it. otherwise scold.
+						if (this.hands.get(author).contains(Card.ALIBI)) {
+							this.hands.get(author).remove(Card.ALIBI);
+							this.broadcast(author.getName() + " used an alibi!");
+							this.pause = 0;
+							this.nextTurn();
+							this.announcePlayerTurn();
+						} else {
+							this.message(author, "You don't have an Alibi card, silly.").queue();
+						}
+						break;
 					}
 					break;
 				case 1:
-					previous = this.discard.get(this.discard.size() - 1);
+					previous = this.apparentDiscard.get(this.apparentDiscard.size() - 1);
 
 					if (this.users.stream().map(user -> user.getAsTag()).anyMatch(s -> s.equals(message))) {
 						// get target
@@ -115,12 +156,27 @@ public class Game {
 							this.pause = 2;
 						} else {
 							if (previous == Card.HOLMES) {
-								this.discard.remove(this.discard.size() - 1); // so that play as normal afterwards
-								// TODO arrest func
+								this.apparentDiscard.remove(this.apparentDiscard.size() - 1); // so that play as normal afterwards
+
+								if (!this.arrest(this.users.get(this.turn), this.target)) {
+									// let know target's cards
+									this.messageHandCards(this.target.getName() + "'s hand:", this.users.get(this.turn), this.target);
+								}
 							} else if (previous == Card.MYCROFT) {
-								this.discard.remove(this.discard.size() - 1);
+								this.apparentDiscard.remove(this.apparentDiscard.size() - 1);
 								this.broadcast(author.getName() + " is swapping hands with " + this.target + "!");
-								// TODO swap hands func
+
+								// swap
+								List<Card> targetOld = this.hands.get(this.target);
+								List<Card> authorOld = this.hands.get(author);
+								this.hands.put(author, targetOld);
+								this.hands.put(this.target, authorOld);
+
+								// let know new target's cards
+								this.messageHandCards("New cards in your hand:", this.target, authorOld);
+
+								// let know new author's cards
+								this.messageHandCards("New cards in your hand:", author, targetOld);
 							} else if (previous == Card.DISGUISE) {
 								this.revealCards(this.target, author);
 							}
@@ -156,13 +212,13 @@ public class Game {
 						Card attempted = hand.get(cardIndex);
 						boolean villainEscape = false;
 
-						previous = this.discard.get(this.discard.size() - 1);
+						previous = this.apparentDiscard.get(this.apparentDiscard.size() - 1);
 
 						// if allowed to play
 						if (previous.canPlayNormally(this.location, attempted.name) || (villainEscape = onlyVillains(hand))) {
 							// remove card from hand and play it
 							previous = hand.remove(cardIndex);
-							this.discard.add(previous);
+							this.apparentDiscard.add(previous);
 							this.trueDiscard.add(previous);
 
 							// announce action to other players
@@ -170,13 +226,16 @@ public class Game {
 
 							// RESOLVE CARD ACTIONS!
 
-							// check if villains win
+							// check if villains escape
 							if (villainEscape) {
 								this.broadcast("**" + author.getName() + "** has *escaped* as the villain!");
 								this.endGame();
 							}
 
 							int specialEffect = 0;
+
+							// As detailed earlier, a yandev-meme level else if is the best option here
+							// Aside from putting methods on `Card`, which I don't want to as it over-complicates the otherwise simple program
 
 							// if it's a location card, set it as location
 							if (previous.hasCategory(Category.LOCATION)) {
@@ -209,12 +268,12 @@ public class Game {
 								// redeal
 								cardsInHand.forEach((user, count) -> {
 									List<Card> newHand = new ArrayList<>();
-									StringBuilder handList = new StringBuilder("New cards in hand:");
+									StringBuilder handList = new StringBuilder("New cards in your hand:");
 
 									for (int i = 0; i < count; ++i) {
 										Card card = allHands.remove();
 										newHand.add(card);
-										handList.append("\n- [" + i + "] " + card.name);
+										handList.append("\n- " + card.name + " (" + card.points + " points)");
 									}
 
 									this.hands.put(user, newHand);
@@ -226,14 +285,20 @@ public class Game {
 								this.revealCards(previousPlayer, author);
 							} else if (previous == Card.TELEGRAM) {
 								specialEffect = 2;
+							} else if (previous == Card.HANSOM) {
+								this.broadcast(this.location == Card.THE_COUNTRY ? "We are heading to another countryside location." : "We are heading to another city location.");
+							} else if (previous == Card.TRAIN) {
+								this.broadcast(this.location == Card.THE_COUNTRY ? "We are heading out of the country." : "We are heading out of the city.");
 							}
 
 							if (specialEffect > -1) {
 								this.nextTurn();
 
 								if (specialEffect == 1) {
+									this.message(this.users.get(this.turn), "Uh oh! Scotland Yard was just played, causing you to draw two cards.").queue();
 									drawCards(this.users.get(this.turn), this.deck, 2);
 								} else if (specialEffect == 2) {
+									this.message(this.users.get(this.turn), "Uh oh! You were telegrammed! +10 points.").queue();
 									this.addPoints(this.users.get(this.turn), 10);
 								}
 
@@ -254,8 +319,44 @@ public class Game {
 		}
 	}
 
+	private void messageHandCards(String title, User to, User of) {
+		this.messageHandCards(title, to, this.hands.get(of));
+	}
+
+	private void messageHandCards(String title, User to, List<Card> cards) {
+		StringBuilder handList = new StringBuilder(title);
+
+		for (Card card : cards) {
+			handList.append("\n- " + card.name + " (" + card.points + " points)");
+		}
+
+		this.message(to, handList.toString()).queue();
+	}
+
+	/**
+	 * @return whether the arrest was successful.
+	 */
+	private boolean arrest(User police, User user) {
+		if (this.hands.get(user).stream().anyMatch(c -> c.hasCategory(Category.VILLAIN))) {
+			this.message(user, "You were arrested!").queue();
+			this.broadcastExcept(user, "**" + user.getName() + "** was arrested. **" + user.getName() + "** was a villain!");
+
+			// Handle Arrest Points
+			int villainPoints = this.hands.get(user).stream().filter(c -> c.hasCategory(Category.VILLAIN)).mapToInt(c -> c.points).sum();
+			this.addPoints(user, villainPoints);
+			this.addPoints(police, -villainPoints);
+			this.endGame();
+			return true;
+		} else {
+			this.message(user, "You were arrested, but were discovered to be not guilty.").queue();
+			this.broadcastExcept(user, "**" + user.getName() + "** was arrested, but discovered to be not guilty!");
+			return false;
+		}
+	}
+
 	private void revealCards(User from, User to) {
 		List<Card> cards = new ArrayList<>(this.hands.get(from));
+		this.broadcastExcept(from, "**" + from.getName() + "** takes a peek at up to two cards in " + to.getName() + "'s hand");
 
 		switch (cards.size()) {
 		case 0:
@@ -401,7 +502,7 @@ public class Game {
 
 	private void announcePlayerTurn() {
 		try {
-			Card previous = this.discard.get(this.discard.size() - 1);
+			Card previous = this.apparentDiscard.get(this.apparentDiscard.size() - 1);
 			Card truePrevious = this.trueDiscard.get(this.trueDiscard.size() - 1);
 
 			this.broadcast(Main.appendArray(new StringBuilder("We are in *")
@@ -417,10 +518,10 @@ public class Game {
 			int index = 0;
 
 			for (Card card : hand) {
-				handList.append("\n- [" + (index++) + "] " + card.name);
+				handList.append("\n- [" + (index++) + "] " + card.name + " (" + card.points + " points)");
 			}
 
-			this.message(user, "It is your turn! Cards in your hand: " + handList.toString() + "\nRespond with the [card index] to play a card, or \"draw\" to draw.").queue();
+			this.message(user, "It is your turn! Cards in your hand: " + handList.toString() + "\nRespond with the [card index] to play a card, or \"draw\" to draw." + (hand.isEmpty() ? " You may also \"arrest [DiscordTag#0000]\" to arrest a player." : "")).queue();
 		} catch (Exception e) {
 			e.printStackTrace();
 			throw new RuntimeException(e);
