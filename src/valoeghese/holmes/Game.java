@@ -44,7 +44,7 @@ public class Game {
 	// 1 = player name response, 2 = alibi response, 3 = alibi response to no-hand arrest
 
 	private void updateTime() {
-		this.terminationTime = System.currentTimeMillis() + 1000 * 60 * 5; // 5 minute due time
+		this.terminationTime = System.currentTimeMillis() + 1000 * 60 * 10; // 10 minute due time
 	}
 
 	public void addPlayer(User user) {
