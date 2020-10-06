@@ -63,7 +63,7 @@ public class Card {
 	public static final Card BAKER_STREET = new Card("Baker Street", 2, "Disguise", "Train", "Hansom", "I Suspect", "Telegram").categories(Category.LOCATION);
 	public static final Card SCOTLAND_YARD = new Card("Scotland Yard", 5, "Arrest", "Inspector", "Train", "Hansom", "Disguise").categories(Category.LOCATION);
 	public static final Card THE_COUNTRY = new Card("The Country", 1, "Arrest", "Clue", "Train", "Hansom", "Telegram").categories(Category.LOCATION);
-	public static final Card TELEGRAM = new Card("Telegram", 10, "Train", "Hansom").categories(Category.REQUIRES_TARGET);
+	public static final Card TELEGRAM = new Card("Telegram", 10, "Train", "Hansom");
 	public static final Card CLUE = new Card("Clue", 5, "Telegram", "Inspector", "Disguise", "I Suspect");
 	public static final Card I_SUSPECT = new Card("I Suspect", 5, "Arrest", "Inspector", "Train", "Hansom").categories(Category.REQUIRES_TARGET, Category.CAN_ALIBI);
 	public static final Card DISGUISE = new Card("Disguise", 10, "Clue", "I Suspect").categories(Category.REQUIRES_TARGET);

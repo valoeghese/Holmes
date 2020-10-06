@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 
+import it.unimi.dsi.fastutil.objects.Object2IntArrayMap;
+import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.requests.restaction.MessageAction;
 
@@ -24,6 +26,7 @@ public class Game {
 	public final long id;
 	private final List<User> users = new ArrayList<>();
 	private final Map<User, List<Card>> hands = new HashMap<>();
+	private final Object2IntMap<User> points = new Object2IntArrayMap<>();
 	private Queue<Card> deck;
 	private int turn = 0;
 	private Card location = Card.BAKER_STREET;
@@ -68,7 +71,9 @@ public class Game {
 			return;
 		}
 
-		if (this.users.get(this.turn) == author) {
+		if (this.pause) {
+			// TODO
+		} else if (this.users.get(this.turn) == author) {
 			try {
 				List<Card> hand = this.hands.get(author);
 
@@ -90,10 +95,10 @@ public class Game {
 				} else {
 					int cardIndex = Integer.parseInt(message);
 					Card attempted = hand.get(cardIndex);
-					boolean villainWinGame = false;
+					boolean villainEscape = false;
 
 					// if allowed to play
-					if (this.previous.canPlayNormally(this.location, attempted.name) || (villainWinGame = onlyVillains(hand))) {
+					if (this.previous.canPlayNormally(this.location, attempted.name) || (villainEscape = onlyVillains(hand))) {
 						// remove card from hand and play it
 						this.previous = hand.remove(cardIndex);
 
@@ -103,23 +108,74 @@ public class Game {
 						// RESOLVE CARD ACTIONS!
 
 						// check if villains win
-						if (villainWinGame) {
-							this.broadcast("**" + author.getName() + "** has *escaped* as the villain, **winning** the game! Session ending.");
-							this.terminate();
+						if (villainEscape) {
+							this.broadcast("**" + author.getName() + "** has *escaped* as the villain!");
+							this.endGame();
 						}
 
-						boolean scotlandYardEffect = false;
+						int specialEffect = 0;
 
 						// if it's a location card, set it as location
 						if (this.previous.hasCategory(Category.LOCATION)) {
 							this.location = this.previous;
 
 							if (this.previous == Card.SCOTLAND_YARD) {
-								scotlandYardEffect = true;
+								specialEffect = 1;
 							}
 						}
-
 						// Otherwise check if requires a target
+						else if (this.previous.hasCategory(Category.REQUIRES_TARGET)) {
+
+						}
+						// Otherwise check the remaining cards
+						else if (this.previous == Card.THICK_FOG) {
+							Object2IntMap<User> cardsInHand = new Object2IntArrayMap<>();
+							LinkedList<Card> allHands = new LinkedList<>();
+
+							// collect counts and cards
+							this.hands.forEach((user, cards) -> {
+								cardsInHand.put(user, cards.size());
+								allHands.addAll(cards);
+							});
+
+							// shuffle
+							Collections.shuffle(allHands);
+
+							// redeal
+							cardsInHand.forEach((user, count) -> {
+								List<Card> newHand = new ArrayList<>();
+								StringBuilder handList = new StringBuilder("New cards in hand:");
+
+								for (int i = 0; i < count; ++i) {
+									Card card = allHands.remove();
+									newHand.add(card);
+									handList.append("\n- [" + i + "] " + card.name);
+								}
+
+								this.hands.put(user, newHand);
+
+								this.message(user, handList.toString()).queue();
+							});
+						} else if (this.previous == Card.CLUE) {
+							User previousPlayer = this.previousPlayer();
+							List<Card> cards = new ArrayList<>(this.hands.get(previousPlayer));
+
+							switch (cards.size()) {
+							case 0:
+								this.message(author, previousPlayer.getName() + " has no cards in their hand!").queue();
+								break;
+							case 1:
+								this.message(author, previousPlayer.getName() + " has only " + cards.get(0).name + " in their hand.").queue();
+								break;
+							default:
+								Collections.shuffle(cards);
+								this.message(author, "You reveal the cards " + cards.get(0).name + " and " + cards.get(1).name + " in " + previousPlayer.getName() + "'s hand.").queue();
+								break;
+							}
+						} else if (this.previous == Card.TELEGRAM) {
+							specialEffect = 2;
+						}
+
 						//						// Check if an alibi check needs to be made
 						//						else if (this.previous.hasCategory(Category.CAN_ALIBI)) {
 						//							
@@ -133,13 +189,15 @@ public class Game {
 
 						this.nextTurn();
 
-						if (scotlandYardEffect) {
+						if (specialEffect == 1) {
 							drawCards(this.users.get(this.turn), this.deck, 2);
+						} else if (specialEffect == 2) {
+							this.addPoints(this.users.get(this.turn), 10);
 						}
 
 						this.announcePlayerTurn();
 					} else {
-						this.message(author, "Invalid Card.");
+						this.message(author, "Invalid Card.").queue();
 					}
 				}
 			} catch (NumberFormatException e) {
@@ -150,6 +208,42 @@ public class Game {
 				e.printStackTrace();
 			}
 		}
+	}
+
+	private void addPoints(User user, int points) {
+		this.points.computeInt(user, (usr, current) -> current == null ? points : points + current);
+	}
+
+	private void endGame() {
+		List<String> winner = null;
+		int winnerPoints = Integer.MAX_VALUE;
+		StringBuilder resultMsg = new StringBuilder("The game has ended! Points:");
+
+		for (User user : this.users) {
+			int points = this.points.getOrDefault(user, 0) + this.hands.get(user).stream().mapToInt(card -> card.points).sum();
+
+			if (points < winnerPoints) {
+				winner = new ArrayList<>();
+				winner.add(user.getName());
+			} else if (points == winnerPoints) {
+				winner.add(user.getName()); // should never be null because what kind of idiot ends with integer.maxvalue points
+			}
+
+			resultMsg.append("\n**" + user.getName() + "**: " + points + " points");
+		}
+
+		resultMsg.append("\n\n");
+
+		if (winner.size() == 1) {
+			resultMsg.append("The winner is **" + winner.get(0) + "**");
+		} else {
+			resultMsg.append("The winners are: **");
+			Main.appendArray(resultMsg, winner.toArray(new String[0]));
+			resultMsg.append("**");
+		}
+
+		this.broadcast(resultMsg.toString());
+		this.terminate();
 	}
 
 	public boolean terminateIfOverdue() {
@@ -231,7 +325,7 @@ public class Game {
 		StringBuilder msg = new StringBuilder("**Turn Order**: ");
 
 		for (int i = 0; i < this.capacity; ++i) {
-			msg.append(this.users.get(i).getName());
+			msg.append(this.users.get(this.turn).getName());
 
 			if (i != this.capacity - 1) {
 				msg.append(", ");
@@ -267,6 +361,11 @@ public class Game {
 			e.printStackTrace();
 			throw new RuntimeException(e);
 		}
+	}
+
+	private User previousPlayer() {
+		int i = this.turn - 1;
+		return this.users.get(i < 0 ? this.capacity - 1 : 1);
 	}
 
 	private void nextTurn() {
