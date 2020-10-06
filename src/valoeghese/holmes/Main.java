@@ -62,6 +62,16 @@ public class Main extends ListenerAdapter {
 				} catch (Exception e) {
 					event.getChannel().sendMessage("Error: " + e.getLocalizedMessage()).queue();
 				}
+			} else {
+				long sctm = System.currentTimeMillis();
+
+				if (sctm > nextCleanupTime) {
+					nextCleanupTime = sctm + 1000 * 40; // 40 second delays
+
+					for (Game game : GAMES.values()) {
+						game.terminateIfOverdue();
+					}
+				}
 			}
 		}
 	}
@@ -139,11 +149,6 @@ public class Main extends ListenerAdapter {
 		}
 	}
 
-	public static final Map<User, Game> USER_2_GAME = new HashMap<>();
-	public static final Long2ObjectMap<Game> GAMES = new Long2ObjectArrayMap<>();
-
-	private static int nextGameId = new Random().nextInt(10000) - 5000;
-
 	public static void main(String[] args) {
 		try (FileInputStream fis = new FileInputStream(new File("./properties.txt"))) {
 			Properties p = new Properties();
@@ -168,4 +173,10 @@ public class Main extends ListenerAdapter {
 
 		return stringBuilder;
 	}
+
+	public static final Map<User, Game> USER_2_GAME = new HashMap<>();
+	public static final Long2ObjectMap<Game> GAMES = new Long2ObjectArrayMap<>();
+
+	private static int nextGameId = new Random().nextInt(10000) - 5000;
+	private static long nextCleanupTime = System.currentTimeMillis() + 1000 * 40;
 }
