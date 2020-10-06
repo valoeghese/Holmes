@@ -8,6 +8,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.stream.Collectors;
 
 import it.unimi.dsi.fastutil.objects.Object2IntArrayMap;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
@@ -20,6 +21,8 @@ public class Game {
 		this.terminationTime = System.currentTimeMillis() + 1000 * 60 * 10; 
 		Main.GAMES.put(id, this);
 		this.id = id;
+		this.discard.add(Card.NONE);
+		this.trueDiscard.add(Card.NONE);		
 	}
 
 	private final int capacity;
@@ -30,11 +33,13 @@ public class Game {
 	private Queue<Card> deck;
 	private int turn = 0;
 	private Card location = Card.BAKER_STREET;
-	private Card previous = Card.NONE;
+	private List<Card> discard = new ArrayList<>(); // hack
+	private List<Card> trueDiscard = new ArrayList<>(); // the list of actual discard stuff
+	private User target;
 
 	private long terminationTime;
 	private boolean started = false;
-	private boolean pause = false; // whether to pause the game for an out-of-turn player response
+	private int pause = 0; // whether to pause the game for an out-of-turn player response. 1 = player name response, 2 = alibi response
 
 	private void updateTime() {
 		this.terminationTime = System.currentTimeMillis() + 1000 * 60 * 5; // 5 minute due time
@@ -71,133 +76,172 @@ public class Game {
 			return;
 		}
 
-		if (this.pause) {
-			// TODO
-		} else if (this.users.get(this.turn) == author) {
+		if (this.users.get(this.turn) == author) {
 			try {
-				List<Card> hand = this.hands.get(author);
+				Card previous;
 
-				if (hand.isEmpty()) {
-					// TODO rules for arrest/draw of non-villains
-					this.nextTurn();
-					this.announcePlayerTurn();
-				} else if (message.equals("draw")) {
-					// action
-					drawCards(author, this.deck, 1);
-					this.broadcastExcept(author, "**" + author.getName() + "** has chosen to draw.");
+				switch (this.pause) {
+				case 2:
+					previous = this.discard.get(this.discard.size() - 1);
 
-					// response
-					this.message(author, "You drew *" + hand.get(hand.size() - 1).name + "*").queue();
+					// Switching doesn't work on objects and switching on string name bad.
+					// So a yandev meme level else if statement is actually *best option* probably
+					// TODO everything
+					if (previous == Card.WATSON) {
+						this.discard.remove(this.discard.size() - 1);
+					} else if (previous == Card.I_SUSPECT) {
 
-					// finalise
-					this.nextTurn();
-					this.announcePlayerTurn();
-				} else {
-					int cardIndex = Integer.parseInt(message);
-					Card attempted = hand.get(cardIndex);
-					boolean villainEscape = false;
+					} else if (previous == Card.INSPECTOR) {
 
-					// if allowed to play
-					if (this.previous.canPlayNormally(this.location, attempted.name) || (villainEscape = onlyVillains(hand))) {
-						// remove card from hand and play it
-						this.previous = hand.remove(cardIndex);
+					} else if (previous == Card.ARREST) {
 
-						// announce action to other players
-						this.broadcastExcept(author, "**" + author.getName() + "** has chosen to play *" + this.previous.name + "*.");
+					}
+					break;
+				case 1:
+					previous = this.discard.get(this.discard.size() - 1);
 
-						// RESOLVE CARD ACTIONS!
-
-						// check if villains win
-						if (villainEscape) {
-							this.broadcast("**" + author.getName() + "** has *escaped* as the villain!");
-							this.endGame();
-						}
-
-						int specialEffect = 0;
-
-						// if it's a location card, set it as location
-						if (this.previous.hasCategory(Category.LOCATION)) {
-							this.location = this.previous;
-
-							if (this.previous == Card.SCOTLAND_YARD) {
-								specialEffect = 1;
-							}
-						}
-						// Otherwise check if requires a target
-						else if (this.previous.hasCategory(Category.REQUIRES_TARGET)) {
-
-						}
-						// Otherwise check the remaining cards
-						else if (this.previous == Card.THICK_FOG) {
-							Object2IntMap<User> cardsInHand = new Object2IntArrayMap<>();
-							LinkedList<Card> allHands = new LinkedList<>();
-
-							// collect counts and cards
-							this.hands.forEach((user, cards) -> {
-								cardsInHand.put(user, cards.size());
-								allHands.addAll(cards);
-							});
-
-							// shuffle
-							Collections.shuffle(allHands);
-
-							// redeal
-							cardsInHand.forEach((user, count) -> {
-								List<Card> newHand = new ArrayList<>();
-								StringBuilder handList = new StringBuilder("New cards in hand:");
-
-								for (int i = 0; i < count; ++i) {
-									Card card = allHands.remove();
-									newHand.add(card);
-									handList.append("\n- [" + i + "] " + card.name);
-								}
-
-								this.hands.put(user, newHand);
-
-								this.message(user, handList.toString()).queue();
-							});
-						} else if (this.previous == Card.CLUE) {
-							User previousPlayer = this.previousPlayer();
-							List<Card> cards = new ArrayList<>(this.hands.get(previousPlayer));
-
-							switch (cards.size()) {
-							case 0:
-								this.message(author, previousPlayer.getName() + " has no cards in their hand!").queue();
-								break;
-							case 1:
-								this.message(author, previousPlayer.getName() + " has only " + cards.get(0).name + " in their hand.").queue();
-								break;
-							default:
-								Collections.shuffle(cards);
-								this.message(author, "You reveal the cards " + cards.get(0).name + " and " + cards.get(1).name + " in " + previousPlayer.getName() + "'s hand.").queue();
+					if (this.users.stream().map(user -> user.getAsTag()).anyMatch(s -> s.equals(message))) {
+						// get target
+						for (User user : this.users) {
+							if (user.getAsTag().equals(message)) {
+								this.target = user;
 								break;
 							}
-						} else if (this.previous == Card.TELEGRAM) {
-							specialEffect = 2;
 						}
 
-						//						// Check if an alibi check needs to be made
-						//						else if (this.previous.hasCategory(Category.CAN_ALIBI)) {
-						//							
-						//						}
-						//						// otherwise resolve specific card actions
-						//						else switch (attempted.name) {
-						//						case "Disguise":
-						//							this.message(author, message).queue();
-						//							break;
-						//						}
+						if (previous.hasCategory(Category.CAN_ALIBI)) {
+							// message target
+							this.message(this.target, "You are the target of the card \"" + previous.name + "\". Do you wish to use an alibi? y/n.").queue();
+							this.pause = 2;
+						} else {
+							if (previous == Card.HOLMES) {
+								this.discard.remove(this.discard.size() - 1); // so that play as normal afterwards
+								// TODO arrest func
+							} else if (previous == Card.MYCROFT) {
+								this.discard.remove(this.discard.size() - 1);
+								this.broadcast(author.getName() + " is swapping hands with " + this.target + "!");
+								// TODO swap hands func
+							} else if (previous == Card.DISGUISE) {
+								this.revealCards(this.target, author);
+							}
 
+							this.pause = 0;
+							this.nextTurn();
+							this.announcePlayerTurn();
+						}
+					} else {
+						this.message(author, "Not a valid user in game! Valid options " + this.users.stream().map(user -> user.getAsTag()).collect(Collectors.joining(" "))).queue();
+					}
+					break;
+				default:
+					List<Card> hand = this.hands.get(author);
+
+					if (hand.isEmpty()) {
+						// TODO rules for arrest/draw of non-villains when empty hand
 						this.nextTurn();
+						this.announcePlayerTurn();
+					} else if (message.equals("draw")) {
+						// action
+						drawCards(author, this.deck, 1);
+						this.broadcastExcept(author, "**" + author.getName() + "** has chosen to draw.");
 
-						if (specialEffect == 1) {
-							drawCards(this.users.get(this.turn), this.deck, 2);
-						} else if (specialEffect == 2) {
-							this.addPoints(this.users.get(this.turn), 10);
-						}
+						// response
+						this.message(author, "You drew *" + hand.get(hand.size() - 1).name + "*").queue();
 
+						// finalise
+						this.nextTurn();
 						this.announcePlayerTurn();
 					} else {
-						this.message(author, "Invalid Card.").queue();
+						int cardIndex = Integer.parseInt(message);
+						Card attempted = hand.get(cardIndex);
+						boolean villainEscape = false;
+
+						previous = this.discard.get(this.discard.size() - 1);
+
+						// if allowed to play
+						if (previous.canPlayNormally(this.location, attempted.name) || (villainEscape = onlyVillains(hand))) {
+							// remove card from hand and play it
+							previous = hand.remove(cardIndex);
+							this.discard.add(previous);
+							this.trueDiscard.add(previous);
+
+							// announce action to other players
+							this.broadcastExcept(author, "**" + author.getName() + "** has chosen to play *" + previous.name + "*.");
+
+							// RESOLVE CARD ACTIONS!
+
+							// check if villains win
+							if (villainEscape) {
+								this.broadcast("**" + author.getName() + "** has *escaped* as the villain!");
+								this.endGame();
+							}
+
+							int specialEffect = 0;
+
+							// if it's a location card, set it as location
+							if (previous.hasCategory(Category.LOCATION)) {
+								this.location = previous;
+
+								if (previous == Card.SCOTLAND_YARD) {
+									specialEffect = 1;
+								}
+							}
+							// Otherwise check if requires a target
+							else if (previous.hasCategory(Category.REQUIRES_TARGET)) {
+								this.pause = 1;
+								this.message(author, "Type the tag of the target player, in the format Username#0000.").queue();
+								specialEffect = -1; // no next turn yet
+							}
+							// Otherwise check the remaining cards
+							else if (previous == Card.THICK_FOG) {
+								Object2IntMap<User> cardsInHand = new Object2IntArrayMap<>();
+								LinkedList<Card> allHands = new LinkedList<>();
+
+								// collect counts and cards
+								this.hands.forEach((user, cards) -> {
+									cardsInHand.put(user, cards.size());
+									allHands.addAll(cards);
+								});
+
+								// shuffle
+								Collections.shuffle(allHands);
+
+								// redeal
+								cardsInHand.forEach((user, count) -> {
+									List<Card> newHand = new ArrayList<>();
+									StringBuilder handList = new StringBuilder("New cards in hand:");
+
+									for (int i = 0; i < count; ++i) {
+										Card card = allHands.remove();
+										newHand.add(card);
+										handList.append("\n- [" + i + "] " + card.name);
+									}
+
+									this.hands.put(user, newHand);
+
+									this.message(user, handList.toString()).queue();
+								});
+							} else if (previous == Card.CLUE) {
+								User previousPlayer = this.previousPlayer();
+								this.revealCards(previousPlayer, author);
+							} else if (previous == Card.TELEGRAM) {
+								specialEffect = 2;
+							}
+
+							if (specialEffect > -1) {
+								this.nextTurn();
+
+								if (specialEffect == 1) {
+									drawCards(this.users.get(this.turn), this.deck, 2);
+								} else if (specialEffect == 2) {
+									this.addPoints(this.users.get(this.turn), 10);
+								}
+
+								this.announcePlayerTurn();
+							}
+						} else {
+							this.message(author, "Invalid Card.").queue();
+						}
 					}
 				}
 			} catch (NumberFormatException e) {
@@ -207,6 +251,23 @@ public class Game {
 				this.message(author, "Error processing message: " + e.getLocalizedMessage()).complete();
 				e.printStackTrace();
 			}
+		}
+	}
+
+	private void revealCards(User from, User to) {
+		List<Card> cards = new ArrayList<>(this.hands.get(from));
+
+		switch (cards.size()) {
+		case 0:
+			this.message(to, from.getName() + " has no cards in their hand!").queue();
+			break;
+		case 1:
+			this.message(to, from.getName() + " has only " + cards.get(0).name + " in their hand.").queue();
+			break;
+		default:
+			Collections.shuffle(cards);
+			this.message(to, "You reveal the cards " + cards.get(0).name + " and " + cards.get(1).name + " in " + from.getName() + "'s hand.").queue();
+			break;
 		}
 	}
 
@@ -340,11 +401,14 @@ public class Game {
 
 	private void announcePlayerTurn() {
 		try {
+			Card previous = this.discard.get(this.discard.size() - 1);
+			Card truePrevious = this.trueDiscard.get(this.trueDiscard.size() - 1);
+
 			this.broadcast(Main.appendArray(new StringBuilder("We are in *")
 					.append(this.location.name)
 					.append("*.\n**Previous Card**: *")
-					.append(this.previous.name)
-					.append("*\n**Allowed Next Cards**:"), this.previous.allowsNext).toString());
+					.append(truePrevious.name)
+					.append("*\n**Allowed Next Cards**:"), previous.allowsNext).toString());
 
 			User user = this.users.get(this.turn);
 			StringBuilder handList = new StringBuilder();
