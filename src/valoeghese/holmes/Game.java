@@ -8,6 +8,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import it.unimi.dsi.fastutil.objects.Object2IntArrayMap;
@@ -177,7 +178,7 @@ public class Game {
 						this.message(author, "Not a valid user in game! Valid options " + this.users.stream().map(user -> user.getAsTag()).collect(Collectors.joining(" "))).queue();
 					}
 				} else {
-					this.message(author, "\"Arrest\" action requires a discord tag argument.");
+					this.message(author, "\"Arrest\" action requires a discord tag argument.").queue();
 				}
 			} else if (message.equals("draw")) {
 				// action
@@ -329,9 +330,11 @@ public class Game {
 						this.messageHandCards("New cards in your hand:", this.target, nextHand);
 					}
 				} else if (previous == Card.I_SUSPECT) {
-					// TODO e
+					this.drawCards(this.target, this.deck, 1, n -> this.message(this.target, "From the *I Suspect* card, you drew a " + n.name).queue());
 				} else if (previous == Card.INSPECTOR) {
-					//TODO f
+					List<Card> drawn = new ArrayList<>();
+					this.drawCards(this.target, this.deck, 2, drawn::add);
+					this.messageHandCards("From an *Inspector* card, you drew:", this.target, drawn);
 				}
 
 				this.pause = 0;
@@ -575,11 +578,18 @@ public class Game {
 	}
 
 	private void drawCards(User user, Queue<Card> deck, int count) {
+		this.drawCards(user, deck, count, n -> {});
+	}
+
+	private void drawCards(User user, Queue<Card> deck, int count, Consumer<Card> callback) {
 		if (!deck.isEmpty()) {
+			count = Math.max(deck.size(), count);
 			List<Card> cards = this.hands.computeIfAbsent(user, u -> new ArrayList<>());
 
 			for (int i = 0; i < count; ++i) {
-				cards.add(deck.remove());
+				Card next = deck.remove();
+				callback.accept(next);
+				cards.add(next);
 			}
 		}
 	}
