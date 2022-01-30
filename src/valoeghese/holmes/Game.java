@@ -185,7 +185,7 @@ public class Game {
 				} else {
 					this.message(author, "\"Arrest\" action requires a discord tag argument.").queue();
 				}
-			} else if (message.equals("draw")) {
+			} else if ("draw".equals(message)) {
 				// action
 				drawCards(author, this.deck, 1);
 				this.broadcastExcept(author, "**" + author.getName() + "** has chosen to draw.");
@@ -197,105 +197,109 @@ public class Game {
 				this.nextTurn();
 				this.announcePlayerTurn();
 			} else {
-				int cardIndex = Integer.parseInt(message);
-				Card attempted = hand.get(cardIndex);
-				boolean villainEscape = false;
+				try {
+					int cardIndex = Integer.parseInt(message);
+					Card attempted = hand.get(cardIndex);
+					boolean villainEscape = false;
 
-				Card previous = this.apparentDiscard.get(this.apparentDiscard.size() - 1);
+					Card previous = this.apparentDiscard.get(this.apparentDiscard.size() - 1);
 
-				// if allowed to play
-				if (previous.canPlayNormally(this.location, attempted.name) || (villainEscape = onlyVillains(hand))) {
-					// remove card from hand and play it
-					previous = hand.remove(cardIndex);
-					this.apparentDiscard.add(previous);
-					this.trueDiscard.add(previous);
+					// if allowed to play
+					if (previous.canPlayNormally(this.location, attempted.name) || (villainEscape = onlyVillains(hand))) {
+						// remove card from hand and play it
+						previous = hand.remove(cardIndex);
+						this.apparentDiscard.add(previous);
+						this.trueDiscard.add(previous);
 
-					// announce action to other players
-					this.broadcastExcept(author, "**" + author.getName() + "** has chosen to play *" + previous.name + "*.");
+						// announce action to other players
+						this.broadcastExcept(author, "**" + author.getName() + "** has chosen to play *" + previous.name + "*.");
 
-					// RESOLVE CARD ACTIONS!
+						// RESOLVE CARD ACTIONS!
 
-					// check if villains escape
-					if (villainEscape) {
-						this.broadcast("**" + author.getName() + "** has *escaped* as the villain!");
-						this.endGame();
-						return;
-					}
-
-					int specialEffect = 0;
-
-					// As detailed earlier, a yandev-meme level else if is the best option here
-					// Aside from putting methods on `Card`, which I don't want to as it over-complicates the otherwise simple program
-
-					// if it's a location card, set it as location
-					if (previous.hasCategory(Category.LOCATION)) {
-						this.location = previous;
-
-						if (previous == Card.SCOTLAND_YARD) {
-							specialEffect = 1;
+						// check if villains escape
+						if (villainEscape) {
+							this.broadcast("**" + author.getName() + "** has *escaped* as the villain!");
+							this.endGame();
+							return;
 						}
-					}
-					// Otherwise check if requires a target
-					else if (previous.hasCategory(Category.REQUIRES_TARGET)) {
-						this.pause = 1;
-						this.message(author, "Type the tag of the target player, in the format Username#0000.").queue();
-						specialEffect = -1; // no next turn yet
-					}
-					// Otherwise check the remaining cards
-					else if (previous == Card.THICK_FOG) {
-						Object2IntMap<User> cardsInHand = new Object2IntArrayMap<>();
-						LinkedList<Card> allHands = new LinkedList<>();
 
-						// collect counts and cards
-						this.hands.forEach((user, cards) -> {
-							cardsInHand.put(user, cards.size());
-							allHands.addAll(cards);
-						});
+						int specialEffect = 0;
 
-						// shuffle
-						Collections.shuffle(allHands);
+						// As detailed earlier, a yandev-meme level else if is the best option here
+						// Aside from putting methods on `Card`, which I don't want to as it over-complicates the otherwise simple program
 
-						// redeal
-						cardsInHand.forEach((user, count) -> {
-							List<Card> newHand = new ArrayList<>();
-							StringBuilder handList = new StringBuilder("New cards in your hand:");
+						// if it's a location card, set it as location
+						if (previous.hasCategory(Category.LOCATION)) {
+							this.location = previous;
 
-							for (int i = 0; i < count; ++i) {
-								Card card = allHands.remove();
-								newHand.add(card);
-								handList.append("\n- " + card.name + " (" + card.points + " points)");
+							if (previous == Card.SCOTLAND_YARD) {
+								specialEffect = 1;
+							}
+						}
+						// Otherwise check if requires a target
+						else if (previous.hasCategory(Category.REQUIRES_TARGET)) {
+							this.pause = 1;
+							this.message(author, "Type the tag of the target player, in the format Username#0000.").queue();
+							specialEffect = -1; // no next turn yet
+						}
+						// Otherwise check the remaining cards
+						else if (previous == Card.THICK_FOG) {
+							Object2IntMap<User> cardsInHand = new Object2IntArrayMap<>();
+							LinkedList<Card> allHands = new LinkedList<>();
+
+							// collect counts and cards
+							this.hands.forEach((user, cards) -> {
+								cardsInHand.put(user, cards.size());
+								allHands.addAll(cards);
+							});
+
+							// shuffle
+							Collections.shuffle(allHands);
+
+							// redeal
+							cardsInHand.forEach((user, count) -> {
+								List<Card> newHand = new ArrayList<>();
+								StringBuilder handList = new StringBuilder("New cards in your hand:");
+
+								for (int i = 0; i < count; ++i) {
+									Card card = allHands.remove();
+									newHand.add(card);
+									handList.append("\n- " + card.name + " (" + card.points + " points)");
+								}
+
+								this.hands.put(user, newHand);
+
+								this.message(user, handList.toString()).queue();
+							});
+						} else if (previous == Card.CLUE) {
+							User previousPlayer = this.previousPlayer();
+							this.revealCards(previousPlayer, author);
+						} else if (previous == Card.TELEGRAM) {
+							specialEffect = 2;
+						} else if (previous == Card.HANSOM) {
+							this.broadcast(this.location == Card.THE_COUNTRY ? "We are heading to another countryside location." : "We are heading to another city location.");
+						} else if (previous == Card.TRAIN) {
+							this.broadcast(this.location == Card.THE_COUNTRY ? "We are heading out of the country." : "We are heading out of the city.");
+						}
+
+						if (specialEffect > -1) {
+							this.nextTurn();
+
+							if (specialEffect == 1) {
+								this.message(this.users.get(this.turn), "Uh oh! Scotland Yard was just played, causing you to draw two cards.").queue();
+								drawCards(this.users.get(this.turn), this.deck, 2);
+							} else if (specialEffect == 2) {
+								this.message(this.users.get(this.turn), "Uh oh! You were telegrammed! +10 points.").queue();
+								this.addPoints(this.users.get(this.turn), 10);
 							}
 
-							this.hands.put(user, newHand);
-
-							this.message(user, handList.toString()).queue();
-						});
-					} else if (previous == Card.CLUE) {
-						User previousPlayer = this.previousPlayer();
-						this.revealCards(previousPlayer, author);
-					} else if (previous == Card.TELEGRAM) {
-						specialEffect = 2;
-					} else if (previous == Card.HANSOM) {
-						this.broadcast(this.location == Card.THE_COUNTRY ? "We are heading to another countryside location." : "We are heading to another city location.");
-					} else if (previous == Card.TRAIN) {
-						this.broadcast(this.location == Card.THE_COUNTRY ? "We are heading out of the country." : "We are heading out of the city.");
-					}
-
-					if (specialEffect > -1) {
-						this.nextTurn();
-
-						if (specialEffect == 1) {
-							this.message(this.users.get(this.turn), "Uh oh! Scotland Yard was just played, causing you to draw two cards.").queue();
-							drawCards(this.users.get(this.turn), this.deck, 2);
-						} else if (specialEffect == 2) {
-							this.message(this.users.get(this.turn), "Uh oh! You were telegrammed! +10 points.").queue();
-							this.addPoints(this.users.get(this.turn), 10);
+							this.announcePlayerTurn();
 						}
-
-						this.announcePlayerTurn();
+					} else {
+						this.message(author, "You cannot play this card currently.").queue();
 					}
-				} else {
-					this.message(author, "You cannot play this card currently.").queue();
+				} catch (NumberFormatException e) {
+					System.out.println("User sent invalid command " + e);
 				}
 			}
 		}
