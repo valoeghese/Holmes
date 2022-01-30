@@ -152,10 +152,10 @@ public class Main extends ListenerAdapter {
 	}
 
 	public static void main(String[] args) {
-		try (FileInputStream fis = new FileInputStream(new File("./properties.txt"))) {
+		try (FileInputStream fis = new FileInputStream("./properties.txt")) {
 			Properties p = new Properties();
 			p.load(fis);
-			new JDABuilder(p.getProperty("key")).addEventListeners(new Main()).build();
+			JDABuilder.createDefault(p.getProperty("key")).addEventListeners(new Main()).build();
 		} catch (Exception e) {
 			e.printStackTrace();
 			throw new RuntimeException("Exception running bot!", e);
