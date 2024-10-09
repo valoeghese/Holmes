@@ -72,6 +72,14 @@ public class Game {
 		}
 	}
 
+	private Card getPreviousForPlay() {
+		return this.apparentDiscard.get(this.apparentDiscard.size() - 1);
+	}
+
+	private Card getTruePrevious() {
+		return this.trueDiscard.get(this.trueDiscard.size() - 1);
+	}
+
 	public void process(User author, String message) {
 		if (this.terminateIfOverdue()) {
 			this.message(author, "Your session has expired!").queue();
@@ -104,7 +112,7 @@ public class Game {
 
 	private void processAsTarget(User author, String message) {
 		if (this.users.get(this.turn) == author) {
-			Card previous = this.apparentDiscard.get(this.apparentDiscard.size() - 1);
+			Card previous = this.getTruePrevious();
 
 			if (this.users.stream().map(user -> user.getAsTag()).anyMatch(s -> s.equals(message))) {
 				// get target
@@ -121,8 +129,6 @@ public class Game {
 					this.pause = 2;
 				} else {
 					if (previous == Card.HOLMES) {
-						this.apparentDiscard.remove(this.apparentDiscard.size() - 1); // so that play as normal afterwards
-
 						if (this.arrest(this.users.get(this.turn), this.target)) {
 							return;
 						} else {
@@ -130,7 +136,6 @@ public class Game {
 							this.messageHandCards(this.target.getName() + "'s hand:", this.users.get(this.turn), this.target);
 						}
 					} else if (previous == Card.MYCROFT) {
-						this.apparentDiscard.remove(this.apparentDiscard.size() - 1);
 						this.broadcast(author.getName() + " is swapping hands with " + this.target + "!");
 
 						// swap
@@ -202,13 +207,15 @@ public class Game {
 					Card attempted = hand.get(cardIndex);
 					boolean villainEscape = false;
 
-					Card previous = this.apparentDiscard.get(this.apparentDiscard.size() - 1);
+					Card previous = this.getPreviousForPlay();
 
 					// if allowed to play
 					if (previous.canPlayNormally(this.location, attempted) || (villainEscape = onlyVillains(hand))) {
 						// remove card from hand and play it
 						previous = hand.remove(cardIndex);
-						this.apparentDiscard.add(previous);
+						if (previous.allowsNext.length > 0) { // such cards take the allowsNext of the card below
+							this.apparentDiscard.add(previous);
+						}
 						this.trueDiscard.add(previous);
 
 						// announce action to other players
@@ -309,15 +316,13 @@ public class Game {
 		if (this.target == author) {
 			switch (message.charAt(0)) {
 			case 'n':
-				Card previous = this.apparentDiscard.get(this.apparentDiscard.size() - 1);
+				Card previous = this.getTruePrevious();
 
 				// Switching doesn't work on objects and switching on string name bad.
 				// So a yandev meme level else if statement is actually *best option* probably
 				// And no, I don't want to overcomplicate things by making it a method on Card.
 
 				if (previous == Card.WATSON) {
-					this.apparentDiscard.remove(this.apparentDiscard.size() - 1);
-
 					if (this.arrest(this.users.get(this.turn), this.target)) {
 						return;
 					} else {
@@ -554,8 +559,8 @@ public class Game {
 
 	private void announcePlayerTurn() {
 		try {
-			Card previous = this.apparentDiscard.get(this.apparentDiscard.size() - 1);
-			Card truePrevious = this.trueDiscard.get(this.trueDiscard.size() - 1);
+			Card previous = this.getPreviousForPlay();
+			Card truePrevious = this.getTruePrevious();
 
 			this.broadcast(Main.appendArray(new StringBuilder("We are in *")
 					.append(this.location.name)
