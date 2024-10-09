@@ -32,7 +32,10 @@ public class Card {
 			return !this.hasCategory(Category.MOVEMENT) && (nextCard != MYCROFT || location != THE_COUNTRY);
 		}
 
-		if (this.hasCategory(Category.MOVEMENT)) {
+		if (this.hasCategory(Category.MOVEMENT) && this != THICK_FOG) {
+			if (nextCard == THICK_FOG) return true;
+			if (!nextCard.hasCategory(Category.LOCATION)) return false;
+
 			if (this == Card.HANSOM) {
 				// I know that nxor is probably better but this is more readable
 				return (nextCard == Card.THE_COUNTRY) == (location == Card.THE_COUNTRY);
