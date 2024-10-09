@@ -82,14 +82,14 @@ public class Main extends ListenerAdapter {
 	}
 
 	@Override
-	public void onMessageReactionAdd(MessageReactionAddEvent event) {
+	public void onMessageReactionAdd(@NotNull MessageReactionAddEvent event) {
 		if (!event.isFromGuild()) return;
 
 		try {
-			if (event.getEmoji().toString().equals("RE:U+1f60e")) {
+			if (event.getEmoji().getName().equals("\uD83D\uDE0E")) {
 				Message message = event.getChannel().retrieveMessageById(event.getMessageId()).complete();
 
-				if (!message.getMentions().getMembers().isEmpty() && message.getAuthor().equals(event.getJDA().getSelfUser())) {
+				if (!message.getMentions().getUsers().isEmpty() && message.getAuthor().equals(event.getJDA().getSelfUser())) {
 					User sender = event.getUser();
 					String[] arr = message.getContentRaw().split(" ");
 					String arr0 = arr[arr.length - 1];
@@ -121,12 +121,14 @@ public class Main extends ListenerAdapter {
 	}
 
 	@Override
-	public void onMessageReactionRemove(MessageReactionRemoveEvent event) {
+	public void onMessageReactionRemove(@NotNull MessageReactionRemoveEvent event) {
+		if (!event.isFromGuild()) return;
+
 		try {
-			if (event.getEmoji().toString().equals("RE:U+1f60e")) {
+			if (event.getEmoji().toString().equals("\uD83D\uDE0E")) {
 				Message message = event.getChannel().retrieveMessageById(event.getMessageId()).complete();
 
-				if (!message.getMentions().getMembers().isEmpty() && message.getAuthor().equals(event.getJDA().getSelfUser())) {
+				if (!message.getMentions().getUsers().isEmpty() && message.getAuthor().equals(event.getJDA().getSelfUser())) {
 					User sender = event.getUser();
 					String[] arr = message.getContentRaw().split(" ");
 					String arr0 = arr[arr.length - 1];
