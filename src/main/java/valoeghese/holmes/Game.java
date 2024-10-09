@@ -559,14 +559,14 @@ public class Game {
 
 	private void announcePlayerTurn() {
 		try {
-			Card previous = this.getPreviousForPlay();
+			Card playPrevious = this.getPreviousForPlay();
 			Card truePrevious = this.getTruePrevious();
 
 			this.broadcast(Main.appendArray(new StringBuilder("We are in *")
 					.append(this.location.name)
 					.append("*.\n**Previous Card**: *")
 					.append(truePrevious.name)
-					.append("*\n**Allowed Next Cards**:"), previous.allowsNext).toString());
+					.append("*\n**Allowed Next Cards**:"), playPrevious.allowsNext).toString());
 
 			User user = this.users.get(this.turn);
 			StringBuilder handList = new StringBuilder();
@@ -577,7 +577,7 @@ public class Game {
 			for (Card card : hand) {
 				handList.append("\n-");
 
-				boolean playable = previous.canPlayNormally(this.location, card) || onlyVillains(hand);
+				boolean playable = playPrevious.canPlayNormally(this.location, card) || onlyVillains(hand);
 				if (playable) {
 					handList.append("**");
 				}
