@@ -5,27 +5,32 @@
 
 package valoeghese.holmes;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Random;
-
 import it.unimi.dsi.fastutil.longs.Long2ObjectArrayMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.User;
-import net.dv8tion.jda.api.events.message.guild.GuildMessageReceivedEvent;
-import net.dv8tion.jda.api.events.message.guild.react.GuildMessageReactionAddEvent;
-import net.dv8tion.jda.api.events.message.priv.PrivateMessageReceivedEvent;
+import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
+import net.dv8tion.jda.api.events.message.react.MessageReactionAddEvent;
 import net.dv8tion.jda.api.events.message.react.MessageReactionRemoveEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.requests.GatewayIntent;
+import org.jetbrains.annotations.NotNull;
+
+import java.io.FileInputStream;
+import java.util.*;
 
 public class Main extends ListenerAdapter {
 	@Override
-	public void onGuildMessageReceived(GuildMessageReceivedEvent event) {
+	public void onMessageReceived(@NotNull MessageReceivedEvent event) {
+		if (event.isFromGuild()) {
+			this.onGuildMessageReceived(event);
+		} else {
+			this.onPrivateMessageReceived(event);
+		}
+	}
+
+	private void onGuildMessageReceived(MessageReceivedEvent event) {
 		Message message = event.getMessage();
 		User author = message.getAuthor();
 
@@ -77,12 +82,14 @@ public class Main extends ListenerAdapter {
 	}
 
 	@Override
-	public void onGuildMessageReactionAdd(GuildMessageReactionAddEvent event) {
+	public void onMessageReactionAdd(MessageReactionAddEvent event) {
+		if (!event.isFromGuild()) return;
+
 		try {
-			if (event.getReactionEmote().toString().equals("RE:U+1f60e")) {
+			if (event.getEmoji().toString().equals("RE:U+1f60e")) {
 				Message message = event.getChannel().retrieveMessageById(event.getMessageId()).complete();
 
-				if (!message.getMentionedMembers().isEmpty() && message.getAuthor().equals(event.getJDA().getSelfUser())) {
+				if (!message.getMentions().getMembers().isEmpty() && message.getAuthor().equals(event.getJDA().getSelfUser())) {
 					User sender = event.getUser();
 					String[] arr = message.getContentRaw().split(" ");
 					String arr0 = arr[arr.length - 1];
@@ -116,10 +123,10 @@ public class Main extends ListenerAdapter {
 	@Override
 	public void onMessageReactionRemove(MessageReactionRemoveEvent event) {
 		try {
-			if (event.getReactionEmote().toString().equals("RE:U+1f60e")) {
+			if (event.getEmoji().toString().equals("RE:U+1f60e")) {
 				Message message = event.getChannel().retrieveMessageById(event.getMessageId()).complete();
 
-				if (!message.getMentionedMembers().isEmpty() && message.getAuthor().equals(event.getJDA().getSelfUser())) {
+				if (!message.getMentions().getMembers().isEmpty() && message.getAuthor().equals(event.getJDA().getSelfUser())) {
 					User sender = event.getUser();
 					String[] arr = message.getContentRaw().split(" ");
 					String arr0 = arr[arr.length - 1];
@@ -138,8 +145,7 @@ public class Main extends ListenerAdapter {
 		}
 	}
 
-	@Override
-	public void onPrivateMessageReceived(PrivateMessageReceivedEvent event) {
+	public void onPrivateMessageReceived(MessageReceivedEvent event) {
 		User author = event.getAuthor();
 
 		if (!author.isBot()) {
@@ -155,7 +161,7 @@ public class Main extends ListenerAdapter {
 		try (FileInputStream fis = new FileInputStream("./properties.txt")) {
 			Properties p = new Properties();
 			p.load(fis);
-			JDABuilder.createDefault(p.getProperty("key")).addEventListeners(new Main()).build();
+			JDABuilder.createDefault(p.getProperty("key")).addEventListeners(new Main()).enableIntents(List.of(GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MESSAGE_REACTIONS, GatewayIntent.DIRECT_MESSAGES)).build();
 		} catch (Exception e) {
 			e.printStackTrace();
 			throw new RuntimeException("Exception running bot!", e);

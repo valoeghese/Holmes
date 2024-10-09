@@ -6,3 +6,5 @@ properties.txt
 .idea
 *.iml
 out
+# Maven
+target

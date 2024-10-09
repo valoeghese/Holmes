@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 import it.unimi.dsi.fastutil.objects.Object2IntArrayMap;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import net.dv8tion.jda.api.entities.User;
-import net.dv8tion.jda.api.requests.restaction.MessageAction;
+import net.dv8tion.jda.api.requests.restaction.MessageCreateAction;
 
 public class Game {
 	public Game(int capacity, int id) {
@@ -479,7 +479,7 @@ public class Game {
 
 	// PRIVATE METHODS
 
-	private MessageAction message(User user, String message) {
+	private MessageCreateAction message(User user, String message) {
 		return user.openPrivateChannel().complete().sendMessage(message);
 	}
 
