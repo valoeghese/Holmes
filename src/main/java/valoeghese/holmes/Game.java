@@ -22,7 +22,7 @@ public class Game {
 		this.terminationTime = System.currentTimeMillis() + 1000 * 60 * 10; 
 		Main.GAMES.put(id, this);
 		this.id = id;
-		this.apparentDiscard.add(Card.NONE);
+		this.nextPlayDiscard.add(Card.NONE);
 		this.trueDiscard.add(Card.NONE);		
 	}
 
@@ -34,7 +34,7 @@ public class Game {
 	private Queue<Card> deck;
 	private int turn = 0;
 	private Card location = Card.BAKER_STREET;
-	private List<Card> apparentDiscard = new ArrayList<>(); // hack
+	private List<Card> nextPlayDiscard = new ArrayList<>(); // hack
 	private List<Card> trueDiscard = new ArrayList<>(); // the list of actual discard stuff
 	private User target;
 
@@ -73,7 +73,7 @@ public class Game {
 	}
 
 	private Card getPreviousForPlay() {
-		return this.apparentDiscard.get(this.apparentDiscard.size() - 1);
+		return this.nextPlayDiscard.get(this.nextPlayDiscard.size() - 1);
 	}
 
 	private Card getTruePrevious() {
@@ -214,7 +214,7 @@ public class Game {
 						// remove card from hand and play it
 						previous = hand.remove(cardIndex);
 						if (previous.allowsNext.length > 0) { // such cards take the allowsNext of the card below
-							this.apparentDiscard.add(previous);
+							this.nextPlayDiscard.add(previous);
 						}
 						this.trueDiscard.add(previous);
 
