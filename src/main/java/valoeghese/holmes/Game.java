@@ -205,7 +205,7 @@ public class Game {
 					Card previous = this.apparentDiscard.get(this.apparentDiscard.size() - 1);
 
 					// if allowed to play
-					if (previous.canPlayNormally(this.location, attempted.name) || (villainEscape = onlyVillains(hand))) {
+					if (previous.canPlayNormally(this.location, attempted) || (villainEscape = onlyVillains(hand))) {
 						// remove card from hand and play it
 						previous = hand.remove(cardIndex);
 						this.apparentDiscard.add(previous);
@@ -570,7 +570,20 @@ public class Game {
 			int index = 0;
 
 			for (Card card : hand) {
-				handList.append("\n- [" + (index++) + "] " + card.name + " (" + card.points + " points)");
+				handList.append("\n-");
+
+				boolean playable = previous.canPlayNormally(this.location, card) || onlyVillains(hand);
+				if (playable) {
+					handList.append("**");
+				}
+
+				handList.append("[").append(index++).append("] ")
+						.append(card.name)
+						.append(" (").append(card.points).append(" points)");
+
+				if (playable) {
+					handList.append("**");
+				}
 			}
 
 			this.message(user, "It is your turn! Cards in your hand: " + handList.toString() + "\nRespond with the [card index] to play a card, or \"draw\" to draw." + (hand.isEmpty() ? " You may also \"arrest [DiscordTag#0000]\" to arrest a player." : "")).queue();
